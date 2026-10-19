@@ -183,6 +183,78 @@ st.markdown(
         margin: 12px 0;
         color: #7f1d1d;
     }
+    .step1-start-box {
+        background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+        border: 3px solid #f59e0b;
+        border-left: 10px solid #d97706;
+        border-radius: 14px;
+        padding: 16px 22px;
+        margin-bottom: 14px;
+        box-shadow: 0 4px 14px rgba(245, 158, 11, 0.18);
+    }
+    .step1-badge {
+        display: inline-block;
+        background-color: #d97706;
+        color: #ffffff;
+        font-size: 14px;
+        font-weight: 800;
+        padding: 4px 12px;
+        border-radius: 999px;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        margin-bottom: 6px;
+    }
+    .step1-title {
+        font-size: 26px;
+        font-weight: 900;
+        color: #0f172a;
+        margin: 2px 0 4px 0;
+        line-height: 1.25;
+    }
+    .step1-subtitle {
+        font-size: 15.5px;
+        font-weight: 600;
+        color: #78350f;
+        margin: 0;
+    }
+    .selected-date-pill {
+        background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+        color: #ffffff;
+        border-radius: 12px;
+        padding: 12px 18px;
+        margin-top: 6px;
+        margin-bottom: 10px;
+        box-shadow: 0 4px 12px rgba(2, 132, 199, 0.22);
+        border: 2px solid #38bdf8;
+    }
+    .selected-date-pill-label {
+        font-size: 12.5px;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: #bae6fd;
+        letter-spacing: 0.6px;
+    }
+    .selected-date-pill-value {
+        font-size: 24px;
+        font-weight: 900;
+        color: #ffffff;
+        margin-top: 2px;
+    }
+    div[data-testid="stSelectbox"]:has(label p),
+    div[data-testid="stSelectbox"] {
+        margin-bottom: 2px;
+    }
+    div[data-testid="stSelectbox"]:has(div[aria-label*="FECHA DE TU CITA"]) div[data-baseweb="select"] > div,
+    div[data-testid="stSelectbox"]:has(input[aria-label*="FECHA DE TU CITA"]) div[data-baseweb="select"] > div {
+        min-height: 58px !important;
+        font-size: 21px !important;
+        font-weight: 800 !important;
+        border: 3px solid #0284c7 !important;
+        border-radius: 10px !important;
+        background-color: #f0f9ff !important;
+        color: #0f172a !important;
+        box-shadow: 0 3px 10px rgba(2, 132, 199, 0.16) !important;
+    }
 </style>
 """,
     unsafe_allow_html=True,
@@ -560,7 +632,14 @@ with tab_reservar:
                 if st.button("🔍 Ver Ventana del Ticket con QR", use_container_width=True):
                     show_appointment_voucher_dialog(tk)
 
-    st.subheader(f"📌 Paso 1: Selecciona la Fecha de Atención ({meses_nombres[selected_month]} {selected_year})")
+    html_step1_header = (
+        f'<div class="step1-start-box">'
+        f'<span class="step1-badge">👉 ¡EMPIEZA AQUÍ! — PASO 1</span>'
+        f'<div class="step1-title">📅 Selecciona la Fecha de tu Cita Médica ({meses_nombres[selected_month]} {selected_year})</div>'
+        f'<p class="step1-subtitle">Haz clic en el recuadro azul de abajo para elegir el día (Lunes a Sábado) en que deseas atenderte:</p>'
+        f'</div>'
+    )
+    st.markdown(html_step1_header, unsafe_allow_html=True)
 
     working_days_meta = [d for d in days_list if not d["is_sunday"]]
     default_day_idx = 0
@@ -570,15 +649,21 @@ with tab_reservar:
                 default_day_idx = idx
                 break
 
-    col_sel_day, col_summary_day = st.columns([1.4, 2.6])
+    col_sel_day, col_summary_day = st.columns([1.65, 2.35])
     with col_sel_day:
+        st.markdown(
+            '<div style="font-size:18px; font-weight:800; color:#0369a1; margin-bottom:4px;">'
+            '👇 HAZ CLIC AQUÍ PARA ELEGIR LA FECHA DE TU CITA:</div>',
+            unsafe_allow_html=True,
+        )
         selected_day_num = st.selectbox(
-            "Elige el día de tu cita médica (Lunes a Sábado):",
+            "FECHA DE TU CITA MÉDICA (Lunes a Sábado):",
             [d["day"] for d in working_days_meta],
             index=default_day_idx,
+            label_visibility="collapsed",
             format_func=lambda dnum: next(
                 (
-                    f"{dm['weekday_name']} {dm['day']:02d}/{selected_month:02d}/{selected_year}"
+                    f"📅 {dm['weekday_name'].upper()} {dm['day']:02d}/{selected_month:02d}/{selected_year}"
                     + (f" — 🎉 {dm['holiday_name']}" if dm["is_holiday"] else "")
                     for dm in working_days_meta
                     if dm["day"] == dnum
@@ -590,6 +675,17 @@ with tab_reservar:
     day_consultorios = get_day_ce_consultorios(selected_year, selected_month, selected_day_num)
     m_info = day_consultorios["morning"]
     t_info = day_consultorios["afternoon"]
+    sel_day_meta = day_consultorios["day_meta"]
+
+    with col_sel_day:
+        html_sel_pill = (
+            f'<div class="selected-date-pill">'
+            f'<div class="selected-date-pill-label">📌 Fecha seleccionada para tu atención:</div>'
+            f'<div class="selected-date-pill-value">'
+            f'🗓️ {sel_day_meta["weekday_name"]} {selected_day_num:02d} de {meses_nombres[selected_month]} de {selected_year}'
+            f'</div></div>'
+        )
+        st.markdown(html_sel_pill, unsafe_allow_html=True)
 
     with col_summary_day:
         k1, k2, k3 = st.columns(3)
