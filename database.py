@@ -108,6 +108,7 @@ def init_db():
                 doctor_id INTEGER NOT NULL REFERENCES doctors(id),
                 doctor_name TEXT NOT NULL,
                 doctor_cmp TEXT NOT NULL,
+                patient_doc_type TEXT DEFAULT 'DNI', -- 'DNI' o 'CE'
                 patient_dni TEXT NOT NULL,
                 patient_names TEXT NOT NULL,
                 patient_age INTEGER,
@@ -119,6 +120,12 @@ def init_db():
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        # Migración automática si la tabla ya existía sin patient_doc_type
+        cols_info = cursor.execute("PRAGMA table_info(appointments)").fetchall()
+        col_names = [c["name"] for c in cols_info]
+        if "patient_doc_type" not in col_names:
+            cursor.execute("ALTER TABLE appointments ADD COLUMN patient_doc_type TEXT DEFAULT 'DNI'")
 
         # Índices para búsquedas rápidas por fecha, turno y DNI
         cursor.execute("""

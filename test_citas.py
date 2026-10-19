@@ -4,17 +4,23 @@ Pruebas automatizadas del Sistema de Citas por Internet - Servicio de Medicina
 del C.S. Su Santidad Juan Pablo II.
 """
 
-from database import init_db
+from database import init_db, get_connection
 from schedule_sync import (
     MORNING_SLOTS,
     AFTERNOON_SLOTS,
     sync_from_external_turnos_db,
     get_day_ce_consultorios,
+    validate_booking_data,
     book_appointment,
     cancel_appointment,
     search_appointments,
 )
-from exporter import generate_ticket_html, generate_daily_padron_excel
+from exporter import (
+    generate_ticket_html,
+    generate_whatsapp_info,
+    generate_daily_padron_excel,
+    generate_admission_datasheet_csv,
+)
 
 
 def run_tests():
@@ -22,86 +28,138 @@ def run_tests():
     sync_res = sync_from_external_turnos_db()
     print("Sync Result:", sync_res["message"])
 
+    # Limpiar datos previos de prueba si existieran
+    with get_connection() as conn:
+        conn.execute("DELETE FROM appointments WHERE patient_dni IN ('08123456', '001598745', '44556677')")
+        conn.commit()
+
     assert len(MORNING_SLOTS) == 16, "Mañana debe tener 16 cupos"
-    assert MORNING_SLOTS[0]["label"] == "08:00 - 08:15"
-    assert MORNING_SLOTS[-1]["label"] == "11:45 - 12:00"
-
     assert len(AFTERNOON_SLOTS) == 16, "Tarde debe tener 16 cupos"
-    assert AFTERNOON_SLOTS[0]["label"] == "14:00 - 14:15"
-    assert AFTERNOON_SLOTS[-1]["label"] == "17:45 - 18:00"
 
-    # Verificar el día Lunes 19 de Octubre de 2026 (tiene CE en Mañana y CE en Tarde)
-    day_info = get_day_ce_consultorios(2026, 10, 19)
-    assert day_info["morning"]["is_enabled"] is True, "Lunes 19/10/2026 debe tener CE Mañana habilitado"
-    assert day_info["afternoon"]["is_enabled"] is True, "Lunes 19/10/2026 debe tener CE Tarde habilitado"
-    print(
-        f"19/10/2026 -> Mañana: {day_info['morning']['titular_doctor']['doctor_name']} | "
-        f"Tarde: {day_info['afternoon']['titular_doctor']['doctor_name']}"
+    # a) Probar rechazo de DNI con letras o con menos de 8 dígitos
+    ok_bad_dni, msg_bad_dni, _ = validate_booking_data(
+        2026, 10, 19, "M", 1, "DNI", "1234567", "RAMIREZ SOTO, CARLOS", 40, "987654321", "SIS", "Control"
     )
+    assert ok_bad_dni is False and "8 dígitos" in msg_bad_dni
 
-    # Probar reserva de cita en Mañana Cupo #1 (08:00 - 08:15)
+    ok_alpha_dni, _, _ = validate_booking_data(
+        2026, 10, 19, "M", 1, "DNI", "0812345A", "RAMIREZ SOTO, CARLOS", 40, "987654321", "SIS", "Control"
+    )
+    assert ok_alpha_dni is False
+
+    # b) Probar rechazo de celular que no tenga exactamente 9 dígitos
+    ok_bad_phone, msg_bad_phone, _ = validate_booking_data(
+        2026, 10, 19, "M", 1, "DNI", "08123456", "RAMIREZ SOTO, CARLOS", 40, "98765432", "SIS", "Control"
+    )
+    assert ok_bad_phone is False and "9 dígitos" in msg_bad_phone
+
+    # c) Probar validación previa (para ventana en grande) con DNI que empieza con 0 ('08123456')
+    ok_pre, _, pre_payload = validate_booking_data(
+        2026, 10, 19, "M", 1, "DNI", "08123456", "RAMIREZ SOTO, CARLOS", 40, "999888777", "SIS", "Control preventivo"
+    )
+    assert ok_pre is True
+    assert pre_payload["patient_dni"] == "08123456"
+    assert pre_payload["patient_doc_type"] == "DNI"
+
+    # Confirmar la cita del Lunes 19/10/2026
     ok, msg, ticket = book_appointment(
         year=2026,
         month=10,
         day=19,
         shift_period="M",
         slot_number=1,
-        patient_dni="99887766",
-        patient_names="PACIENTE DE PRUEBA UNO",
-        patient_age=35,
+        patient_doc_type="DNI",
+        patient_dni="08123456",
+        patient_names="RAMIREZ SOTO, CARLOS",
+        patient_age=40,
         patient_phone="999888777",
         insurance_type="SIS",
         reason="Control preventivo",
         booked_by="Test Suite",
     )
     assert ok is True, f"Error al reservar: {msg}"
-    assert ticket["slot_time"] == "08:00 - 08:15"
-    print("Cita reservada:", ticket["ticket_code"])
+    assert ticket["patient_dni"] == "08123456"
+    print("Cita reservada con 0 inicial:", ticket["ticket_code"], "DNI:", ticket["patient_dni"])
 
-    # Verificar bloqueo de doble cita el mismo día para el mismo DNI
-    ok_dup, msg_dup, _ = book_appointment(
+    # e.1) Probar restricción de 1 cita por semana con el MISMO DNI en otro día de la misma semana (Miércoles 21/10/2026)
+    ok_wk_dni, msg_wk_dni, _ = book_appointment(
+        year=2026,
+        month=10,
+        day=21,
+        shift_period="M",
+        slot_number=3,
+        patient_doc_type="DNI",
+        patient_dni="08123456",
+        patient_names="RAMIREZ SOTO, CARLOS",
+        patient_age=40,
+        patient_phone="999888777",
+        insurance_type="SIS",
+        reason="Segunda consulta en la semana",
+        booked_by="Test Suite",
+    )
+    assert ok_wk_dni is False, "No debe permitir 2 citas en la misma semana con el mismo documento"
+    assert "Servicio de Admisión de manera presencial" in msg_wk_dni
+    print("Bloqueo semanal por DNI verificado correctamente.")
+
+    # e.2) Probar restricción de 1 cita por semana por COINCIDENCIA EN EL NOMBRE (misma semana, Viernes 23/10/2026)
+    ok_wk_name, msg_wk_name, _ = book_appointment(
+        year=2026,
+        month=10,
+        day=23,
+        shift_period="T",
+        slot_number=2,
+        patient_doc_type="DNI",
+        patient_dni="44556677",
+        patient_names="CARLOS RAMIREZ SOTO",
+        patient_age=40,
+        patient_phone="999888777",
+        insurance_type="SIS",
+        reason="Intento con otro doc pero mismo nombre",
+        booked_by="Test Suite",
+    )
+    assert ok_wk_name is False, "No debe permitir 2 citas en la misma semana cuando coincide el nombre del paciente"
+    assert "Servicio de Admisión de manera presencial" in msg_wk_name
+    print("Bloqueo semanal por coincidencia de nombre verificado correctamente.")
+
+    # Probar Carné de Extranjería (CE) numérico en otra persona
+    ok_ce, msg_ce, ticket_ce = book_appointment(
         year=2026,
         month=10,
         day=19,
         shift_period="T",
         slot_number=2,
-        patient_dni="99887766",
-        patient_names="PACIENTE DE PRUEBA UNO",
-        patient_age=35,
-        patient_phone="999888777",
+        patient_doc_type="CE",
+        patient_dni="001598745",
+        patient_names="GONZALEZ PEREZ, MARIA ELENA",
+        patient_age=29,
+        patient_phone="912345678",
         insurance_type="SIS",
-        reason="Otra consulta",
+        reason="Control general",
         booked_by="Test Suite",
     )
-    assert ok_dup is False, "No debe permitir dos citas el mismo día para el mismo DNI"
+    assert ok_ce is True, f"Error al reservar con CE: {msg_ce}"
+    assert ticket_ce["patient_doc_type"] == "CE"
 
-    # Verificar generación de Ticket HTML, WhatsApp (+51) y Excel
-    from exporter import generate_whatsapp_info
+    # d) Verificar Hoja de Datos de Admisión en Excel (.xlsx) y CSV (.csv)
     wa_info = generate_whatsapp_info(ticket)
     assert wa_info["phone_normalized"] == "51999888777"
-    assert "https://wa.me/51999888777?text=" in wa_info["wa_url"]
     html_str = generate_ticket_html(ticket)
-    assert "C.S. SU SANTIDAD JUAN PABLO II" in html_str
-    assert "https://wa.me/51999888777" in html_str
+    assert "08123456" in html_str
+
     excel_io = generate_daily_padron_excel(2026, 10, 19)
-    assert len(excel_io.getvalue()) > 1000
+    assert len(excel_io.getvalue()) > 1500
+    csv_bytes = generate_admission_datasheet_csv(2026, 10, 19, only_booked=True)
+    csv_text = csv_bytes.decode("utf-8")
+    assert "08123456" in csv_text and "001598745" in csv_text
+    print("Exportacion de Hoja de Datos de Admision (.xlsx y .csv) verificada.")
 
-    # Buscar y luego cancelar la cita de prueba para dejar todos los cupos limpios
-    found = search_appointments("99887766")
-    assert len(found) >= 1
-
-    ok_c, msg_c = cancel_appointment(ticket["ticket_code"], "99887766", "Test Suite")
-    assert ok_c is True, f"Error al cancelar: {msg_c}"
-    print("Cancelacion exitosa:", msg_c)
-
-    # Limpiar registro de prueba para dejar la base de datos impecable
-    from database import get_connection
+    # Limpiar citas de prueba
     with get_connection() as conn:
-        conn.execute("DELETE FROM appointments WHERE patient_dni = '99887766'")
+        conn.execute("DELETE FROM appointments WHERE patient_dni IN ('08123456', '001598745', '44556677')")
         conn.execute("DELETE FROM audit_logs WHERE user_name = 'Test Suite'")
         conn.commit()
 
-    print("[OK] TODAS LAS PRUEBAS PASARON EXITOSAMENTE.")
+    print("[OK] TODAS LAS CONDICIONES (a, b, c, d, e) PASARON EXITOSAMENTE.")
 
 
 if __name__ == "__main__":

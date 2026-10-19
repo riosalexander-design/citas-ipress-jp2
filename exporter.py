@@ -1,11 +1,12 @@
 """
 exporter.py
-Generador de reportes en Excel (.xlsx) para Admisión / Jefatura Médica,
+Generador de reportes y Hojas de Datos en Excel (.xlsx) y CSV (.csv) para el Responsable de Admisión,
 enlaces y mensajes directos a WhatsApp (+51), y comprobantes imprimibles (HTML/PDF)
 de Citas Médicas para el C.S. Su Santidad Juan Pablo II.
 """
 
 import io
+import csv
 import urllib.parse
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -22,7 +23,7 @@ def format_peru_whatsapp_number(raw_phone: str) -> str:
     digits = "".join(ch for ch in (raw_phone or "") if ch.isdigit())
     if not digits:
         return ""
-    if len(digits) == 9 and digits.startswith("9"):
+    if len(digits) == 9:
         return f"51{digits}"
     if len(digits) == 11 and digits.startswith("51"):
         return digits
@@ -44,6 +45,7 @@ def generate_whatsapp_info(appointment: dict) -> dict:
         if appointment["shift_period"] == "M"
         else "Consultorio de Medicina N° 2 (Tarde)"
     )
+    doc_type_lbl = appointment.get("patient_doc_type") or "DNI"
 
     msg = (
         f"🏥 *C.S. SU SANTIDAD JUAN PABLO II*\n"
@@ -57,13 +59,14 @@ def generate_whatsapp_info(appointment: dict) -> dict:
         f"👨‍⚕️ *Médico Cirujano:* {appointment['doctor_name']} (CMP: {appointment['doctor_cmp']})\n"
         f"──────────────────────\n"
         f"👤 *Paciente:* {appointment['patient_names']}\n"
-        f"🪪 *DNI / Doc.:* {appointment['patient_dni']} (Edad: {appointment.get('patient_age') or '-'} años)\n"
+        f"🪪 *{doc_type_lbl}:* {appointment['patient_dni']} (Edad: {appointment.get('patient_age') or '-'} años)\n"
+        f"📱 *Celular:* {appointment.get('patient_phone') or '-'}\n"
         f"🛡️ *Seguro:* {appointment.get('insurance_type', 'SIS')}\n"
         f"🩺 *Motivo:* {appointment.get('reason') or 'Consulta de Medicina General'}\n"
         f"──────────────────────\n"
         f"📌 *INDICACIONES IMPORTANTES:*\n"
         f"1. Acudir a Admisión *20 minutos antes* de su horario ({appointment['slot_time']}).\n"
-        f"2. Presentar su *DNI físico* y mostrar este mensaje o su ticket en ventanilla."
+        f"2. Presentar su *{doc_type_lbl} físico* y mostrar este mensaje o su ticket en ventanilla."
     )
 
     wa_phone = format_peru_whatsapp_number(appointment.get("patient_phone", ""))
@@ -97,10 +100,11 @@ def generate_ticket_html(appointment: dict) -> str:
         else "Consultorio de Medicina N° 2 (Turno Tarde)"
     )
     status_upper = appointment.get("status", "reservada").upper()
+    doc_type_lbl = appointment.get("patient_doc_type") or "DNI"
     wa_info = generate_whatsapp_info(appointment)
 
     qr_payload = urllib.parse.quote(
-        f"CS-JP2|{appointment['ticket_code']}|DNI:{appointment['patient_dni']}|"
+        f"CS-JP2|{appointment['ticket_code']}|{doc_type_lbl}:{appointment['patient_dni']}|"
         f"FECHA:{appointment['appointment_date']}|HORA:{appointment['slot_time']}|"
         f"CUPO:{appointment['slot_number']}|MED:{appointment['doctor_cmp']}"
     )
@@ -287,7 +291,7 @@ def generate_ticket_html(appointment: dict) -> str:
                 <span>{appointment['patient_names']}</span>
             </div>
             <div class="row">
-                <strong>DNI / Documento:</strong>
+                <strong>Documento ({doc_type_lbl}):</strong>
                 <span>{appointment['patient_dni']} (Edad: {appointment.get('patient_age') or '-'} años)</span>
             </div>
             <div class="row">
@@ -310,7 +314,7 @@ def generate_ticket_html(appointment: dict) -> str:
         <div class="footer">
             <strong>📌 Indicaciones para el Paciente:</strong><br>
             1. Acuda a Admisión del C.S. Su Santidad Juan Pablo II <strong>20 minutos antes</strong> de su horario ({appointment['slot_time']}).<br>
-            2. Presente su <strong>DNI físico</strong> y muestre este comprobante o el mensaje de WhatsApp en ventanilla.<br>
+            2. Presente su <strong>{doc_type_lbl} físico</strong> y muestre este comprobante o el mensaje de WhatsApp en ventanilla.<br>
             3. Programación sincronizada con el Rol Asistencial Oficial (<a href="https://turnos-ipress.streamlit.app/" target="_blank">turnos-ipress.streamlit.app</a>).
         </div>
     </div>
@@ -318,18 +322,108 @@ def generate_ticket_html(appointment: dict) -> str:
 </html>"""
 
 
+def build_admission_daily_records(year: int, month: int, day: int, only_booked: bool = False) -> list[dict]:
+    """
+    Construye la lista estructurada de registros del día para el Responsable de Admisión,
+    incluyendo Día/Fecha, Consultorio (Mañana / Tarde), Cupo, Horario, Tipo y N° de Documento
+    (conservando ceros iniciales), Paciente, Edad, Celular (9 dígitos), Seguro, Motivo, Médico y Estado.
+    """
+    day_data = get_day_ce_consultorios(year, month, day)
+    date_iso = day_data["date_iso"]
+    weekday_name = day_data["day_meta"]["weekday_name"]
+
+    records = []
+    for shift_key, cons_label, turno_corto in [
+        ("morning", "Consultorio Medicina N° 1 - Mañana (08:00-12:00)", "MAÑANA"),
+        ("afternoon", "Consultorio Medicina N° 2 - Tarde (14:00-18:00)", "TARDE"),
+    ]:
+        s_info = day_data[shift_key]
+        doc = s_info["titular_doctor"]
+        doc_name = doc["doctor_name"] if doc else "Sin médico CE programado"
+        doc_cmp = doc["doctor_cmp"] if doc else "-"
+
+        for slot in s_info["slots"]:
+            app = slot["appointment"]
+            if only_booked and app is None:
+                continue
+
+            doc_type_val = (app.get("patient_doc_type") or "DNI") if app else "-"
+            records.append(
+                {
+                    "Fecha": date_iso,
+                    "Día": weekday_name,
+                    "Turno": turno_corto,
+                    "Consultorio": cons_label,
+                    "Cupo N°": f"{slot['slot_number']:02d}",
+                    "Horario Atención": slot["label"],
+                    "Código Ticket": app["ticket_code"] if app else "DISPONIBLE",
+                    "Tipo Doc.": doc_type_val,
+                    "N° Documento Identidad": str(app["patient_dni"]) if app else "-",
+                    "Apellidos y Nombres del Paciente": app["patient_names"] if app else "(Cupo Libre)",
+                    "Edad": app["patient_age"] if (app and app.get("patient_age") is not None) else "-",
+                    "Celular (9 dígitos)": str(app["patient_phone"]) if (app and app.get("patient_phone")) else "-",
+                    "Seguro / Financiamiento": app["insurance_type"] if app else "-",
+                    "Motivo de Consulta": app["reason"] if app else "-",
+                    "Médico Cirujano": app["doctor_name"] if app else doc_name,
+                    "CMP Médico": app["doctor_cmp"] if app else doc_cmp,
+                    "Estado Cita": app["status"].upper() if app else "LIBRE",
+                }
+            )
+    return records
+
+
+def generate_admission_datasheet_csv(year: int, month: int, day: int, only_booked: bool = False) -> bytes:
+    """
+    Genera la Hoja de Datos en formato CSV (con BOM UTF-8 para abrir directamente en Excel)
+    para el Responsable de Admisión, preservando los ceros iniciales del DNI.
+    """
+    records = build_admission_daily_records(year, month, day, only_booked=only_booked)
+    output = io.StringIO()
+    headers = [
+        "Fecha",
+        "Día",
+        "Turno",
+        "Consultorio",
+        "Cupo N°",
+        "Horario Atención",
+        "Código Ticket",
+        "Tipo Doc.",
+        "N° Documento Identidad",
+        "Apellidos y Nombres del Paciente",
+        "Edad",
+        "Celular (9 dígitos)",
+        "Seguro / Financiamiento",
+        "Motivo de Consulta",
+        "Médico Cirujano",
+        "CMP Médico",
+        "Estado Cita",
+    ]
+    writer = csv.DictWriter(output, fieldnames=headers, delimiter=";")
+    writer.writeheader()
+    for r in records:
+        row_copy = dict(r)
+        # Forzar formato texto en CSV para Excel si empieza con 0
+        if row_copy["N° Documento Identidad"] != "-":
+            row_copy["N° Documento Identidad"] = f'="{row_copy["N° Documento Identidad"]}"'
+        writer.writerow(row_copy)
+    return ("\ufeff" + output.getvalue()).encode("utf-8")
+
+
 def generate_daily_padron_excel(year: int, month: int, day: int) -> io.BytesIO:
     """
-    Genera el Padrón Diario en Excel (.xlsx) con los 16 cupos del Consultorio de Medicina Mañana
-    y los 16 cupos del Consultorio de Medicina Tarde, más una hoja de resumen mensual.
+    Genera el Libro de Excel (.xlsx) para el Responsable de Admisión con 3 hojas:
+    1. 'Hoja_Datos_Admision': Tabla plana estructurada con Día, Consultorio, Tipo y N° de Documento
+       (con formato texto '@' para conservar ceros iniciales), Paciente, Edad, Celular, Seguro, Médico y Estado.
+    2. 'Padron_Consultorios': Padrón imprimible separado por Consultorio Mañana (16 cupos) y Tarde (16 cupos).
+    3. 'Rol_Mensual_CE': Resumen mensual de Consultorios de Medicina.
     """
     day_data = get_day_ce_consultorios(year, month, day)
     month_info = get_month_info(year, month)
+    records_all = build_admission_daily_records(year, month, day, only_booked=False)
 
     wb = Workbook()
-    ws = wb.active
-    ws.title = f"Padron_{day:02d}_{month:02d}_{year}"
 
+    # Estilos comunes
     title_fill = PatternFill("solid", fgColor="0F172A")
     sub_fill = PatternFill("solid", fgColor="0369A1")
     morning_hdr_fill = PatternFill("solid", fgColor="1E40AF")
@@ -338,8 +432,8 @@ def generate_daily_padron_excel(year: int, month: int, day: int) -> io.BytesIO:
     free_fill = PatternFill("solid", fgColor="F8FAFC")
     booked_fill = PatternFill("solid", fgColor="EFF6FF")
 
-    font_title = Font(name="Calibri", size=14, bold=True, color="FFFFFF")
-    font_sub = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    font_title = Font(name="Calibri", size=13, bold=True, color="FFFFFF")
+    font_sub = Font(name="Calibri", size=10.5, bold=True, color="FFFFFF")
     font_tbl_hdr = Font(name="Calibri", size=10, bold=True, color="FFFFFF")
     font_bold = Font(name="Calibri", size=10, bold=True, color="0F172A")
     font_regular = Font(name="Calibri", size=10, color="0F172A")
@@ -348,15 +442,91 @@ def generate_daily_padron_excel(year: int, month: int, day: int) -> io.BytesIO:
     thin_side = Side(border_style="thin", color="CBD5E1")
     border_cell = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
 
-    ws.merge_cells("A1:J1")
+    # =========================================================================
+    # HOJA 1: HOJA DE DATOS DE ADMISIÓN (LISTA DEL DÍA, CONSULTORIO, DOCUMENTO)
+    # =========================================================================
+    ws_data = wb.active
+    ws_data.title = f"Hoja_Datos_{day:02d}_{month:02d}_{year}"
+
+    ws_data.merge_cells("A1:Q1")
+    ws_data["A1"] = (
+        "C.S. SU SANTIDAD JUAN PABLO II — HOJA DE DATOS DE ADMISIÓN (LISTA DIARIA POR CONSULTORIO DE MEDICINA)"
+    )
+    ws_data["A1"].fill = title_fill
+    ws_data["A1"].font = font_title
+    ws_data["A1"].alignment = Alignment(horizontal="center", vertical="center")
+    ws_data.row_dimensions[1].height = 26
+
+    ws_data.merge_cells("A2:Q2")
+    day_name = day_data["day_meta"]["weekday_name"]
+    ws_data["A2"] = (
+        f"Fecha: {day_name} {day:02d}/{month:02d}/{year} ({day_data['date_iso']}) | "
+        f"Citas Reservadas: {day_data['total_occupied_day']}/32 | Cupos Libres: {day_data['total_available_day']}/32"
+    )
+    ws_data["A2"].fill = sub_fill
+    ws_data["A2"].font = font_sub
+    ws_data["A2"].alignment = Alignment(horizontal="center", vertical="center")
+    ws_data.row_dimensions[2].height = 20
+
+    data_headers = [
+        "Fecha",
+        "Día",
+        "Turno",
+        "Consultorio",
+        "Cupo N°",
+        "Horario Atención",
+        "Código Ticket",
+        "Tipo Doc.",
+        "N° Documento Identidad",
+        "Apellidos y Nombres del Paciente",
+        "Edad",
+        "Celular (9 dígitos)",
+        "Seguro / Financiamiento",
+        "Motivo de Consulta",
+        "Médico Cirujano",
+        "CMP Médico",
+        "Estado Cita",
+    ]
+    for col_idx, h_text in enumerate(data_headers, start=1):
+        c = ws_data.cell(row=4, column=col_idx, value=h_text)
+        c.fill = table_hdr_fill
+        c.font = font_tbl_hdr
+        c.alignment = Alignment(horizontal="center", vertical="center")
+        c.border = border_cell
+    ws_data.row_dimensions[4].height = 21
+
+    for idx_r, rec in enumerate(records_all, start=5):
+        is_booked = rec["Estado Cita"] != "LIBRE"
+        for col_idx, col_key in enumerate(data_headers, start=1):
+            val = rec[col_key]
+            c = ws_data.cell(row=idx_r, column=col_idx, value=str(val) if col_idx in (5, 9, 12, 16) else val)
+            if col_idx in (5, 9, 12, 16):
+                c.number_format = "@"  # Preservar ceros a la izquierda en DNI (ej. 08123456)
+            c.fill = booked_fill if is_booked else free_fill
+            c.font = font_bold if (is_booked and col_idx in (7, 8, 9, 10)) else (font_regular if is_booked else font_muted)
+            c.alignment = Alignment(
+                horizontal="left" if col_idx in (4, 10, 14, 15) else "center",
+                vertical="center",
+            )
+            c.border = border_cell
+        ws_data.row_dimensions[idx_r].height = 19
+
+    data_widths = [12, 12, 10, 38, 10, 16, 20, 10, 20, 34, 8, 16, 18, 28, 32, 12, 14]
+    for idx, width in enumerate(data_widths, start=1):
+        ws_data.column_dimensions[get_column_letter(idx)].width = width
+
+    # =========================================================================
+    # HOJA 2: PADRÓN IMPRIMIBLE POR CONSULTORIO (MAÑANA Y TARDE)
+    # =========================================================================
+    ws = wb.create_sheet(title=f"Padron_{day:02d}_{month:02d}_{year}")
+    ws.merge_cells("A1:K1")
     ws["A1"] = "CENTRO DE SALUD SU SANTIDAD JUAN PABLO II - PADRÓN DIARIO DE CITAS DE MEDICINA (CE)"
     ws["A1"].fill = title_fill
     ws["A1"].font = font_title
     ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
     ws.row_dimensions[1].height = 28
 
-    ws.merge_cells("A2:J2")
-    day_name = day_data["day_meta"]["weekday_name"]
+    ws.merge_cells("A2:K2")
     ws["A2"] = (
         f"Fecha de Atención: {day_name} {day:02d} de {month_info['month_name']} de {year} ({day_data['date_iso']}) | "
         f"Sincronizado con Rol Asistencial turnos-ipress.streamlit.app"
@@ -377,7 +547,7 @@ def generate_daily_padron_excel(year: int, month: int, day: int) -> io.BytesIO:
             else "SIN MÉDICO PROGRAMADO EN CONSULTORIO DE MEDICINA (CE)"
         )
 
-        ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=10)
+        ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=11)
         cell_banner = ws.cell(row=current_row, column=1)
         cell_banner.value = (
             f"{s_info['consultorio_title'].upper()} | MÉDICO: {doc_desc} | "
@@ -393,11 +563,12 @@ def generate_daily_padron_excel(year: int, month: int, day: int) -> io.BytesIO:
             "Cupo N°",
             "Horario (15 min)",
             "Código Ticket",
-            "DNI / Doc.",
+            "Tipo Doc.",
+            "N° Documento",
             "Apellidos y Nombres del Paciente",
             "Edad",
             "Seguro",
-            "Teléfono",
+            "Celular (9 díg.)",
             "Motivo de Consulta",
             "Estado / Firma",
         ]
@@ -416,20 +587,23 @@ def generate_daily_padron_excel(year: int, month: int, day: int) -> io.BytesIO:
                 f"Cupo #{slot['slot_number']:02d}",
                 slot["label"],
                 app["ticket_code"] if app else "DISPONIBLE",
-                app["patient_dni"] if app else "-",
+                (app.get("patient_doc_type") or "DNI") if app else "-",
+                str(app["patient_dni"]) if app else "-",
                 app["patient_names"] if app else "(Cupo Libre)",
-                app["patient_age"] if (app and app.get("patient_age")) else "-",
+                app["patient_age"] if (app and app.get("patient_age") is not None) else "-",
                 app["insurance_type"] if app else "-",
-                app["patient_phone"] if (app and app.get("patient_phone")) else "-",
+                str(app["patient_phone"]) if (app and app.get("patient_phone")) else "-",
                 app["reason"] if app else "-",
                 app["status"].upper() if app else "LIBRE",
             ]
             for col_idx, val in enumerate(row_vals, start=1):
                 c = ws.cell(row=current_row, column=col_idx, value=val)
+                if col_idx in (5, 9):
+                    c.number_format = "@"
                 c.fill = booked_fill if app else free_fill
-                c.font = font_bold if (col_idx in (1, 2, 3) and app) else (font_regular if app else font_muted)
+                c.font = font_bold if (col_idx in (1, 2, 3, 5) and app) else (font_regular if app else font_muted)
                 c.alignment = Alignment(
-                    horizontal="left" if col_idx in (5, 9) else "center",
+                    horizontal="left" if col_idx in (6, 10) else "center",
                     vertical="center",
                 )
                 c.border = border_cell
@@ -438,10 +612,13 @@ def generate_daily_padron_excel(year: int, month: int, day: int) -> io.BytesIO:
 
         current_row += 2
 
-    col_widths = [11, 16, 20, 14, 34, 8, 12, 14, 28, 16]
+    col_widths = [11, 16, 20, 10, 16, 34, 8, 12, 15, 28, 16]
     for idx, width in enumerate(col_widths, start=1):
         ws.column_dimensions[get_column_letter(idx)].width = width
 
+    # =========================================================================
+    # HOJA 3: ROL MENSUAL DE CONSULTORIO EXTERNO DE MEDICINA (CE)
+    # =========================================================================
     ws_month = wb.create_sheet(title=f"Rol_CE_{month_info['month_name']}_{year}")
     ws_month.merge_cells("A1:H1")
     ws_month["A1"] = (

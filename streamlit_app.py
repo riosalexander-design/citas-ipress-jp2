@@ -5,7 +5,13 @@ Centro de Salud Su Santidad Juan Pablo II.
 Sincronizado con la programación asistencial de https://turnos-ipress.streamlit.app/
 - Consultorio de Medicina Mañana (08:00 a 12:00): 16 cupos (cada 15 minutos)
 - Consultorio de Medicina Tarde  (14:00 a 18:00): 16 cupos (cada 15 minutos)
-Incluye entrega inmediata al paciente mediante Descarga de Comprobante con QR y Mensaje a WhatsApp (+51).
+Cumple con:
+a) Documento de Identidad: DNI (8 dígitos exactos, permite 0 inicial) o Carné de Extranjería (solo números).
+b) Número de celular obligatorio de 9 dígitos numéricos.
+c) Ventana previa con datos en grande para confirmar si son correctos antes de generar la cita.
+d) Botón de descarga en formato Hoja de Datos (.xlsx y .csv) para el Responsable de Admisión.
+e) Máximo 1 cita por semana por Documento de Identidad y verificación de coincidencia en el Nombre
+   (indicando acudir presencialmente al Servicio de Admisión del Centro de Salud en caso de requerir otra cita).
 """
 
 import os
@@ -36,6 +42,7 @@ from schedule_sync import (
     ensure_month_schedule,
     get_day_ce_consultorios,
     get_month_ce_overview,
+    validate_booking_data,
     book_appointment,
     cancel_appointment,
     update_appointment_status,
@@ -46,6 +53,8 @@ from schedule_sync import (
 from exporter import (
     generate_ticket_html,
     generate_whatsapp_info,
+    build_admission_daily_records,
+    generate_admission_datasheet_csv,
     generate_daily_padron_excel,
 )
 
@@ -138,6 +147,42 @@ st.markdown(
         padding: 18px 20px;
         margin-bottom: 14px;
     }
+    .confirm-big-box {
+        background-color: #fffbeb;
+        border: 3px solid #f59e0b;
+        border-radius: 14px;
+        padding: 20px 24px;
+        margin-bottom: 16px;
+    }
+    .confirm-big-item {
+        font-size: 20px;
+        line-height: 1.6;
+        color: #0f172a;
+        border-bottom: 1px dashed #fcd34d;
+        padding: 6px 0;
+    }
+    .confirm-big-label {
+        font-weight: 700;
+        color: #92400e;
+        text-transform: uppercase;
+        font-size: 15px;
+        display: inline-block;
+        min-width: 210px;
+    }
+    .confirm-big-val {
+        font-weight: 800;
+        font-size: 22px;
+        color: #0f172a;
+    }
+    .presencial-alert-box {
+        background-color: #fef2f2;
+        border: 2px solid #dc2626;
+        border-left: 8px solid #dc2626;
+        border-radius: 12px;
+        padding: 16px 20px;
+        margin: 12px 0;
+        color: #7f1d1d;
+    }
 </style>
 """,
     unsafe_allow_html=True,
@@ -149,10 +194,117 @@ if "last_booked_ticket" not in st.session_state:
     st.session_state["last_booked_ticket"] = None
 if "show_ticket_modal" not in st.session_state:
     st.session_state["show_ticket_modal"] = False
+if "pending_booking" not in st.session_state:
+    st.session_state["pending_booking"] = None
+if "show_preconfirm_modal" not in st.session_state:
+    st.session_state["show_preconfirm_modal"] = False
+if "booking_error_banner" not in st.session_state:
+    st.session_state["booking_error_banner"] = None
 
 
 # -------------------------------------------------------------------
-# VENTANA MODAL EMERGENTE CON EL COMPROBANTE Y ENVÍO A WHATSAPP
+# VENTANA MODAL 1: CONFIRMACIÓN PREVIA EN GRANDE ANTES DE SACAR LA CITA
+# (Condición c: muestra los datos en grande y pregunta si son correctos)
+# -------------------------------------------------------------------
+@st.dialog("🔎 Verifica que tus Datos sean Correctos antes de Sacar la Cita", width="large")
+def show_pre_booking_confirmation_dialog(p_data: dict):
+    st.markdown(
+        "### ⚠️ Por favor revisa detenidamente los datos ingresados:"
+    )
+    doc_label = (
+        "DNI (8 dígitos)"
+        if p_data["patient_doc_type"] == "DNI"
+        else "Carné de Extranjería (CE)"
+    )
+
+    st.markdown(
+        f"""
+        <div class="confirm-big-box">
+            <div class="confirm-big-item">
+                <span class="confirm-big-label">🪪 {doc_label}:</span>
+                <span class="confirm-big-val">{p_data['patient_dni']}</span>
+            </div>
+            <div class="confirm-big-item">
+                <span class="confirm-big-label">👤 Paciente:</span>
+                <span class="confirm-big-val">{p_data['patient_names']}</span>
+            </div>
+            <div class="confirm-big-item">
+                <span class="confirm-big-label">🎂 Edad / Seguro:</span>
+                <span class="confirm-big-val">{p_data['patient_age']} años &nbsp;|&nbsp; Seguro: {p_data['insurance_type']}</span>
+            </div>
+            <div class="confirm-big-item">
+                <span class="confirm-big-label">📱 Celular (WhatsApp):</span>
+                <span class="confirm-big-val">{p_data['patient_phone']}</span>
+            </div>
+            <div class="confirm-big-item">
+                <span class="confirm-big-label">📅 Fecha de la Cita:</span>
+                <span class="confirm-big-val">{p_data['weekday_name']} {p_data['date_iso']}</span>
+            </div>
+            <div class="confirm-big-item">
+                <span class="confirm-big-label">🏥 Consultorio y Turno:</span>
+                <span class="confirm-big-val">{p_data['consultorio_title']}</span>
+            </div>
+            <div class="confirm-big-item">
+                <span class="confirm-big-label">⏰ Cupo y Horario:</span>
+                <span class="confirm-big-val" style="color:#0369a1;">Cupo #{p_data['slot_number']:02d} de 16 &nbsp;({p_data['slot_time']} hrs)</span>
+            </div>
+            <div class="confirm-big-item" style="border-bottom:none;">
+                <span class="confirm-big-label">👨‍⚕️ Médico Cirujano:</span>
+                <span class="confirm-big-val">{p_data['doctor_name']} (CMP: {p_data['doctor_cmp']})</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("#### ❓ ¿Los datos mostrados arriba son correctos?")
+
+    c_yes, c_no = st.columns(2)
+    with c_yes:
+        if st.button(
+            "✅ SÍ, SON CORRECTOS — PROCEDER CON LA CITA",
+            use_container_width=True,
+            type="primary",
+        ):
+            ok, msg, ticket_data = book_appointment(
+                year=p_data["year"],
+                month=p_data["month"],
+                day=p_data["day"],
+                shift_period=p_data["shift_period"],
+                slot_number=p_data["slot_number"],
+                patient_doc_type=p_data["patient_doc_type"],
+                patient_dni=p_data["patient_dni"],
+                patient_names=p_data["patient_names"],
+                patient_age=p_data["patient_age"],
+                patient_phone=p_data["patient_phone"],
+                insurance_type=p_data["insurance_type"],
+                reason=p_data["reason"],
+                booked_by="Portal Web Paciente (Confirmado)",
+            )
+            st.session_state["pending_booking"] = None
+            st.session_state["show_preconfirm_modal"] = False
+            if ok:
+                st.session_state["booking_error_banner"] = None
+                st.session_state["last_booked_ticket"] = ticket_data
+                st.session_state["show_ticket_modal"] = True
+                st.rerun()
+            else:
+                st.session_state["booking_error_banner"] = msg
+                st.rerun()
+
+    with c_no:
+        if st.button(
+            "✏️ NO, VOLVER A LA PANTALLA DE DATOS PARA CORREGIR",
+            use_container_width=True,
+            type="secondary",
+        ):
+            st.session_state["show_preconfirm_modal"] = False
+            st.session_state["pending_booking"] = None
+            st.rerun()
+
+
+# -------------------------------------------------------------------
+# VENTANA MODAL 2: TICKET OFICIAL CON QR, DESCARGA Y ENVÍO A WHATSAPP
 # -------------------------------------------------------------------
 @st.dialog("🎫 ¡Cita Confirmada! Recibe tu Comprobante y Mensaje de WhatsApp", width="large")
 def show_appointment_voucher_dialog(tk: dict):
@@ -162,11 +314,12 @@ def show_appointment_voucher_dialog(tk: dict):
         if tk["shift_period"] == "M"
         else "Consultorio de Medicina N° 2 (Turno Tarde)"
     )
+    doc_type_lbl = tk.get("patient_doc_type") or "DNI"
     wa_info = generate_whatsapp_info(tk)
     html_voucher = generate_ticket_html(tk)
 
     qr_payload = urllib.parse.quote(
-        f"CS-JP2|{tk['ticket_code']}|DNI:{tk['patient_dni']}|"
+        f"CS-JP2|{tk['ticket_code']}|{doc_type_lbl}:{tk['patient_dni']}|"
         f"FECHA:{tk['appointment_date']}|HORA:{tk['slot_time']}|CUPO:{tk['slot_number']}"
     )
     qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=140x140&data={qr_payload}"
@@ -191,7 +344,7 @@ def show_appointment_voucher_dialog(tk: dict):
                 </div>
                 <div style="font-size:13.5px; color:#1e293b; line-height:1.55;">
                     👨‍⚕️ <strong>Médico Cirujano:</strong> {tk['doctor_name']} (CMP: <code>{tk['doctor_cmp']}</code>)<br>
-                    👤 <strong>Paciente:</strong> {tk['patient_names']} (DNI: <code>{tk['patient_dni']}</code> — {tk.get('patient_age') or '-'} años)<br>
+                    👤 <strong>Paciente:</strong> {tk['patient_names']} ({doc_type_lbl}: <code>{tk['patient_dni']}</code> — {tk.get('patient_age') or '-'} años)<br>
                     🛡️ <strong>Seguro:</strong> {tk.get('insurance_type', 'SIS')} &nbsp;|&nbsp;
                     📱 <strong>WhatsApp:</strong> {wa_info['display_phone']}<br>
                     🩺 <strong>Motivo:</strong> {tk.get('reason') or 'Consulta de Medicina General'}
@@ -227,7 +380,7 @@ def show_appointment_voucher_dialog(tk: dict):
 
     st.caption(
         "📌 **Recuerda:** Acude a Admisión del C.S. Su Santidad Juan Pablo II **20 minutos antes** de tu horario "
-        f"(`{tk['slot_time']}`) portando tu **DNI físico** y mostrando tu mensaje de WhatsApp o tu Ticket descargado."
+        f"(`{tk['slot_time']}`) portando tu **{doc_type_lbl} físico** y mostrando tu mensaje de WhatsApp o tu Ticket descargado."
     )
 
 
@@ -335,8 +488,11 @@ with st.sidebar:
             st.session_state["staff_user"] = None
             st.rerun()
 
-# Disparar automáticamente la ventana emergente cuando se acaba de reservar una cita
-if st.session_state.get("show_ticket_modal") and st.session_state.get("last_booked_ticket"):
+# Disparar ventana emergente de verificación previa (Condición c) o de Ticket final
+if st.session_state.get("show_preconfirm_modal") and st.session_state.get("pending_booking"):
+    st.session_state["show_preconfirm_modal"] = False
+    show_pre_booking_confirmation_dialog(st.session_state["pending_booking"])
+elif st.session_state.get("show_ticket_modal") and st.session_state.get("last_booked_ticket"):
     st.session_state["show_ticket_modal"] = False
     show_appointment_voucher_dialog(st.session_state["last_booked_ticket"])
 
@@ -351,7 +507,7 @@ st.markdown(
         <strong>Servicio de Medicina General (Consultorio Externo - CE)</strong> &nbsp;|&nbsp;
         🌅 <strong>Consultorio Mañana:</strong> 16 cupos (08:00 a 12:00, cada 15 min) &nbsp;|&nbsp;
         🌇 <strong>Consultorio Tarde:</strong> 16 cupos (14:00 a 18:00, cada 15 min) &nbsp;|&nbsp;
-        📲 <strong>Confirmación por Descarga + WhatsApp</strong>
+        📲 <strong>Confirmación Previa + Descarga y WhatsApp</strong>
     </p>
 </div>
 """,
@@ -369,7 +525,7 @@ tab_reservar, tab_consultar, tab_rol, tab_admision = st.tabs(
         "📅 1. Sacar Cita por Internet",
         "🔍 2. Consultar / Cancelar mi Cita",
         "🗓️ 3. Rol Mensual de Medicina (Turnos-IPRESS)",
-        "🏥 4. Panel de Admisión y Padrón Diario",
+        "🏥 4. Admisión y Descarga de Hoja de Datos",
     ]
 )
 
@@ -377,9 +533,30 @@ tab_reservar, tab_consultar, tab_rol, tab_admision = st.tabs(
 # PESTAÑA 1: SACAR CITA POR INTERNET (PORTAL DEL PACIENTE)
 # ===================================================================
 with tab_reservar:
-    # Mostrar también tarjeta fija con botón de descarga y WhatsApp si acaba de reservar
+    # Mostrar aviso de error si ocurrió alguno al validar o confirmar
+    if st.session_state.get("booking_error_banner"):
+        err_txt = st.session_state["booking_error_banner"]
+        if "Servicio de Admisión de manera presencial" in err_txt:
+            st.markdown(
+                f"""
+                <div class="presencial-alert-box">
+                    <div style="font-size:17px; font-weight:800; margin-bottom:6px;">
+                        🏥 ATENCIÓN: DEBE SOLICITAR SU CITA DE MANERA PRESENCIAL EN EL SERVICIO DE ADMISIÓN
+                    </div>
+                    <div style="font-size:14.5px; line-height:1.55;">
+                        {err_txt}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            st.error(err_txt)
+
+    # Mostrar tarjeta fija con botón de descarga y WhatsApp si acaba de reservar
     if st.session_state["last_booked_ticket"] is not None:
         tk = st.session_state["last_booked_ticket"]
+        doc_type_lbl = tk.get("patient_doc_type") or "DNI"
         wa_info = generate_whatsapp_info(tk)
         html_voucher = generate_ticket_html(tk)
         t_nom = "MAÑANA (08:00 - 12:00)" if tk["shift_period"] == "M" else "TARDE (14:00 - 18:00)"
@@ -389,7 +566,7 @@ with tab_reservar:
             )
             c_tk1, c_tk2, c_tk3 = st.columns([1.8, 1.8, 1.5])
             with c_tk1:
-                st.markdown(f"**👤 Paciente:** {tk['patient_names']} (DNI: `{tk['patient_dni']}`)")
+                st.markdown(f"**👤 Paciente:** {tk['patient_names']} ({doc_type_lbl}: `{tk['patient_dni']}`)")
                 st.markdown(f"**📱 WhatsApp:** `{wa_info['display_phone']}` | **🛡️ Seguro:** {tk['insurance_type']}")
             with c_tk2:
                 st.markdown(f"**📅 Fecha:** `{tk['appointment_date']}` | **⏰ Hora:** **`{tk['slot_time']}` (Cupo #{tk['slot_number']:02d}/16 - {t_nom})**")
@@ -587,7 +764,7 @@ with tab_reservar:
             "Por favor selecciona otro día en el Paso 1."
         )
     else:
-        col_grid, col_form = st.columns([1.35, 1.65])
+        col_grid, col_form = st.columns([1.3, 1.7])
 
         with col_grid:
             chosen_shift = st.radio(
@@ -628,13 +805,13 @@ with tab_reservar:
             free_slots_list = [s for s in active_shift_info["slots"] if s["is_available"]]
             with st.form("booking_patient_form", clear_on_submit=False):
                 st.markdown(
-                    f"#### 🎫 Formulario de Reserva — Turno {active_shift_info['shift_name']} "
+                    f"#### 🎫 Datos del Paciente — Turno {active_shift_info['shift_name']} "
                     f"({day_consultorios['date_iso']})"
                 )
                 st.caption(
                     f"Médico Asignado: **{active_shift_info['titular_doctor']['doctor_name']}** "
-                    f"(CMP: {active_shift_info['titular_doctor']['doctor_cmp']}) — "
-                    "Al confirmar recibirás tu **Ticket descargable con QR** y tu **Constancia por WhatsApp**."
+                    f"(CMP: {active_shift_info['titular_doctor']['doctor_cmp']}) | "
+                    "📌 *Recuerda: Solo se permite 1 cita por semana por paciente.*"
                 )
 
                 selected_slot_num = st.selectbox(
@@ -650,14 +827,21 @@ with tab_reservar:
                     ),
                 )
 
-                f_col1, f_col2 = st.columns([1.2, 1])
-                with f_col1:
-                    inp_dni = st.text_input(
-                        "🪪 DNI / Documento de Identidad (*):",
-                        max_chars=12,
-                        placeholder="Ej. 45892134",
+                doc_col1, doc_col2, doc_col3 = st.columns([1.15, 1.35, 0.8])
+                with doc_col1:
+                    inp_doc_type = st.selectbox(
+                        "🪪 Tipo de Documento (*):",
+                        ["DNI", "CE"],
+                        format_func=lambda x: "DNI (8 dígitos)" if x == "DNI" else "Carné de Extranjería (CE)",
                     )
-                with f_col2:
+                with doc_col2:
+                    inp_dni = st.text_input(
+                        "🔢 N° de Documento (Solo números) (*):",
+                        max_chars=12,
+                        placeholder="DNI: 8 dígitos (ej. 08451236)",
+                        help="Si es DNI debe tener exactamente 8 dígitos numéricos (el primero puede ser 0). Si es CE, solo números.",
+                    )
+                with doc_col3:
                     inp_age = st.number_input("🎂 Edad (años):", min_value=0, max_value=120, value=30, step=1)
 
                 inp_names = st.text_input(
@@ -673,9 +857,10 @@ with tab_reservar:
                     )
                 with f_col4:
                     inp_phone = st.text_input(
-                        "📱 Celular / WhatsApp del Paciente (*):",
-                        max_chars=15,
-                        placeholder="Ej. 987654321 (para enviarte el Ticket)",
+                        "📱 Celular de 9 dígitos (Obligatorio) (*):",
+                        max_chars=9,
+                        placeholder="9 dígitos (ej. 987654321)",
+                        help="Obligatorio: exactamente 9 dígitos numéricos.",
                     )
 
                 inp_reason = st.text_input(
@@ -683,33 +868,35 @@ with tab_reservar:
                     placeholder="Ej. Control médico general, cefalea, hipertensión, evaluación...",
                 )
 
-                submit_book = st.form_submit_button(
-                    "✅ Confirmar Cita y Recibir Ticket + WhatsApp",
+                submit_verify = st.form_submit_button(
+                    "🔎 Verificar mis Datos para Sacar la Cita",
                     use_container_width=True,
                     type="primary",
                 )
 
-                if submit_book:
-                    ok, msg, ticket_data = book_appointment(
+                if submit_verify:
+                    ok_v, msg_v, v_payload = validate_booking_data(
                         year=selected_year,
                         month=selected_month,
                         day=selected_day_num,
                         shift_period=chosen_shift,
                         slot_number=selected_slot_num,
+                        patient_doc_type=inp_doc_type,
                         patient_dni=inp_dni,
                         patient_names=inp_names,
                         patient_age=int(inp_age),
                         patient_phone=inp_phone,
                         insurance_type=inp_insurance.split(" ")[0],
                         reason=inp_reason,
-                        booked_by="Portal Web Paciente",
                     )
-                    if ok:
-                        st.session_state["last_booked_ticket"] = ticket_data
-                        st.session_state["show_ticket_modal"] = True
+                    if ok_v and v_payload:
+                        st.session_state["booking_error_banner"] = None
+                        st.session_state["pending_booking"] = v_payload
+                        st.session_state["show_preconfirm_modal"] = True
                         st.rerun()
                     else:
-                        st.error(msg)
+                        st.session_state["booking_error_banner"] = msg_v
+                        st.rerun()
 
 # ===================================================================
 # PESTAÑA 2: CONSULTAR / CANCELAR MI CITA
@@ -717,15 +904,15 @@ with tab_reservar:
 with tab_consultar:
     st.subheader("🔍 Consulta tu Cita, Descarga tu Ticket o Envíalo a tu WhatsApp")
     st.markdown(
-        "Ingresa tu número de **DNI**, **Código de Ticket** (ej. `JP2-20261019-M01`) o **Apellidos** "
+        "Ingresa tu número de **DNI / Carné de Extranjería**, **Código de Ticket** (ej. `JP2-20261019-M01`) o **Apellidos** "
         "para verificar tu horario, descargar tu comprobante con QR, enviarlo a tu WhatsApp o cancelar tu cita."
     )
 
     c_search1, c_search2 = st.columns([3, 1])
     with c_search1:
         query_str = st.text_input(
-            "Buscar por DNI, Código de Ticket o Apellidos:",
-            placeholder="Ingresa tu DNI (ej. 45892134) o Ticket (ej. JP2-20261019-M01)...",
+            "Buscar por Documento (DNI / CE), Código de Ticket o Apellidos:",
+            placeholder="Ingresa tu DNI (ej. 08451236) o Ticket (ej. JP2-20261019-M01)...",
         )
     with c_search2:
         st.write("")
@@ -751,6 +938,7 @@ with tab_consultar:
                     "cancelada": "⚪ CANCELADA",
                 }.get(app_item["status"], app_item["status"].upper())
 
+                doc_type_lbl = app_item.get("patient_doc_type") or "DNI"
                 wa_item = generate_whatsapp_info(app_item)
                 voucher_html = generate_ticket_html(app_item)
 
@@ -758,7 +946,7 @@ with tab_consultar:
                     r1, r2, r3 = st.columns([1.9, 1.9, 1.5])
                     with r1:
                         st.markdown(f"**🎫 Ticket:** `{app_item['ticket_code']}` — **{status_icon}**")
-                        st.markdown(f"**👤 Paciente:** {app_item['patient_names']} (DNI: `{app_item['patient_dni']}`)")
+                        st.markdown(f"**👤 Paciente:** {app_item['patient_names']} ({doc_type_lbl}: `{app_item['patient_dni']}`)")
                         st.markdown(
                             f"**🛡️ Seguro:** {app_item['insurance_type']} | **📱 WhatsApp:** `{wa_item['display_phone']}`"
                         )
@@ -790,7 +978,7 @@ with tab_consultar:
                                 ok_c, msg_c = cancel_appointment(
                                     app_item["ticket_code"],
                                     patient_dni=app_item["patient_dni"],
-                                    cancelled_by=f"Paciente DNI {app_item['patient_dni']}",
+                                    cancelled_by=f"Paciente {doc_type_lbl} {app_item['patient_dni']}",
                                 )
                                 if ok_c:
                                     st.success(msg_c)
@@ -877,15 +1065,19 @@ with tab_rol:
         st.dataframe(pd.DataFrame(matrix_rows), use_container_width=True, hide_index=True)
 
 # ===================================================================
-# PESTAÑA 4: PANEL DE ADMISIÓN, PADRÓN DIARIO Y CONTROL DE CONSULTORIOS
+# PESTAÑA 4: PANEL DE ADMISIÓN Y DESCARGA DE HOJA DE DATOS (Condición d)
 # ===================================================================
 with tab_admision:
-    st.subheader("🏥 Panel de Admisión, Padrón Diario de 16 Cupos y Gestión de Consultorios")
+    st.subheader("🏥 Panel del Responsable de Admisión — Lista del Día y Descarga en Hoja de Datos")
+    st.markdown(
+        "Desde aquí el **Responsable de Admisión** puede visualizar y descargar en **formato de Hoja de Datos (`.xlsx` Excel y `.csv`)** "
+        "la lista completa del día con **Consultorio (Mañana / Tarde), Tipo y N° de Documento de Identidad (DNI / CE), Apellidos y Nombres, Edad, Celular (9 dígitos), Seguro, Motivo de Consulta y Médico Cirujano**."
+    )
 
-    col_adm_day, col_adm_export = st.columns([2, 1.2])
+    col_adm_day, col_adm_filter, col_adm_dl_xlsx, col_adm_dl_csv = st.columns([1.6, 1.2, 1.3, 1.2])
     with col_adm_day:
         adm_day_num = st.selectbox(
-            "Seleccionar Día para ver el Padrón de Citas (16 cupos Mañana + 16 cupos Tarde):",
+            "📅 Seleccionar Día:",
             [d["day"] for d in days_list],
             index=selected_day_num - 1 if (1 <= selected_day_num <= len(days_list)) else 0,
             format_func=lambda dnum: (
@@ -893,21 +1085,51 @@ with tab_admision:
             ),
             key="adm_day_selector",
         )
-    with col_adm_export:
+    with col_adm_filter:
+        only_booked_filter = st.selectbox(
+            "📋 Mostrar en Hoja de Datos:",
+            [False, True],
+            format_func=lambda b: "Todos los 32 Cupos (Mañana y Tarde)" if not b else "Solo Pacientes Citados del Día",
+        )
+    with col_adm_dl_xlsx:
         st.write("")
         st.write("")
         excel_bytes = generate_daily_padron_excel(selected_year, selected_month, adm_day_num)
         st.download_button(
-            "📊 Descargar Padrón Diario y Rol en Excel (.xlsx)",
+            "📊 Descargar Hoja de Datos Excel (.xlsx)",
             data=excel_bytes,
-            file_name=f"Padron_Citas_Medicina_CS_JuanPabloII_{selected_year}_{selected_month:02d}_{adm_day_num:02d}.xlsx",
+            file_name=f"Hoja_Datos_Admision_CS_JuanPabloII_{selected_year}_{selected_month:02d}_{adm_day_num:02d}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True,
             type="primary",
         )
+    with col_adm_dl_csv:
+        st.write("")
+        st.write("")
+        csv_bytes = generate_admission_datasheet_csv(
+            selected_year, selected_month, adm_day_num, only_booked=only_booked_filter
+        )
+        st.download_button(
+            "📄 Descargar Hoja de Datos (.csv)",
+            data=csv_bytes,
+            file_name=f"Lista_Admision_Pacientes_{selected_year}_{selected_month:02d}_{adm_day_num:02d}.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+
+    # Mostrar la tabla unificada de Hoja de Datos de Admisión en pantalla
+    adm_records = build_admission_daily_records(
+        selected_year, selected_month, adm_day_num, only_booked=only_booked_filter
+    )
+    with st.expander("📋 Ver Lista Unificada de Admisión del Día (Día, Consultorio, Documento de Identidad y Datos del Paciente)", expanded=True):
+        if not adm_records:
+            st.info("No hay pacientes citados aún para la fecha seleccionada.")
+        else:
+            st.dataframe(pd.DataFrame(adm_records), use_container_width=True, hide_index=True, height=340)
 
     adm_day_data = get_day_ce_consultorios(selected_year, selected_month, adm_day_num)
 
+    st.markdown("#### 🏥 Vista por Consultorio (16 Cupos Mañana y 16 Cupos Tarde)")
     col_pad_m, col_pad_t = st.columns(2)
 
     for col_widget, shift_key, icon_str in [
@@ -917,7 +1139,7 @@ with tab_admision:
         with col_widget:
             s_data = adm_day_data[shift_key]
             doc_t = s_data["titular_doctor"]
-            st.markdown(f"#### {icon_str} {s_data['consultorio_title']}")
+            st.markdown(f"##### {icon_str} {s_data['consultorio_title']}")
             if doc_t:
                 st.caption(
                     f"**Médico Responsable:** {doc_t['doctor_name']} (CMP: `{doc_t['doctor_cmp']}`) | "
@@ -935,14 +1157,15 @@ with tab_admision:
                         "Horario": sl["label"],
                         "Estado": ap["status"].upper() if ap else "🟢 LIBRE",
                         "Ticket": ap["ticket_code"] if ap else "-",
-                        "DNI": ap["patient_dni"] if ap else "-",
+                        "Tipo Doc.": (ap.get("patient_doc_type") or "DNI") if ap else "-",
+                        "N° Documento": ap["patient_dni"] if ap else "-",
                         "Paciente": ap["patient_names"] if ap else "(Disponible)",
-                        "Edad": ap["patient_age"] if (ap and ap.get("patient_age")) else "-",
+                        "Edad": ap["patient_age"] if (ap and ap.get("patient_age") is not None) else "-",
                         "Seguro": ap["insurance_type"] if ap else "-",
-                        "WhatsApp": ap["patient_phone"] if (ap and ap.get("patient_phone")) else "-",
+                        "Celular": ap["patient_phone"] if (ap and ap.get("patient_phone")) else "-",
                     }
                 )
-            st.dataframe(pd.DataFrame(padron_rows), use_container_width=True, hide_index=True, height=580)
+            st.dataframe(pd.DataFrame(padron_rows), use_container_width=True, hide_index=True, height=480)
 
     st.markdown("---")
     if st.session_state["staff_user"] is None:
@@ -979,7 +1202,7 @@ with tab_admision:
                         format_func=lambda aid: next(
                             (
                                 f"[{a['shift_period']} Cupo #{a['slot_number']:02d} {a['slot_time']}] "
-                                f"{a['patient_names']} (DNI {a['patient_dni']}) — {a['status'].upper()}"
+                                f"{a['patient_names']} ({a.get('patient_doc_type', 'DNI')} {a['patient_dni']}) — {a['status'].upper()}"
                                 for a in booked_today
                                 if a["id"] == aid
                             ),

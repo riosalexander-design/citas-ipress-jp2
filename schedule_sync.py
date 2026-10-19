@@ -7,7 +7,8 @@ para el Consultorio Externo de Medicina (CE) del C.S. Su Santidad Juan Pablo II.
 
 import os
 import sqlite3
-from datetime import datetime, date
+import unicodedata
+from datetime import datetime, date, timedelta
 from database import get_connection, find_external_turnos_db, log_audit
 from holidays_pe import get_month_info
 
@@ -582,38 +583,100 @@ def get_month_ce_overview(year: int, month: int) -> list[dict]:
     return overview
 
 
-def book_appointment(
+def _normalize_name_tokens(raw_name: str) -> list[str]:
+    """Normaliza un nombre eliminando tildes y signos de puntuación para comparar coincidencia."""
+    if not raw_name:
+        return []
+    nfkd = unicodedata.normalize("NFKD", raw_name.upper())
+    ascii_str = "".join(c for c in nfkd if not unicodedata.combining(c))
+    cleaned = "".join(c if c.isalnum() or c.isspace() else " " for c in ascii_str)
+    stopwords = {"DE", "DEL", "LA", "LAS", "LOS", "Y"}
+    return [tok for tok in cleaned.split() if len(tok) > 1 and tok not in stopwords]
+
+
+def _names_match(name1: str, name2: str) -> bool:
+    """
+    Determina si dos cadenas de Apellidos y Nombres corresponden a la misma persona
+    (independientemente del orden 'APELLIDOS, NOMBRES' o 'NOMBRES APELLIDOS' y tildes).
+    """
+    t1 = set(_normalize_name_tokens(name1))
+    t2 = set(_normalize_name_tokens(name2))
+    if not t1 or not t2:
+        return False
+    if t1 == t2:
+        return True
+    overlap = len(t1.intersection(t2))
+    min_len = min(len(t1), len(t2))
+    if min_len >= 2 and overlap >= min_len:
+        return True
+    if len(t1) >= 3 and len(t2) >= 3 and overlap >= 3:
+        return True
+    return False
+
+
+def validate_booking_data(
     year: int,
     month: int,
     day: int,
     shift_period: str,
     slot_number: int,
+    patient_doc_type: str,
     patient_dni: str,
     patient_names: str,
     patient_age: int,
     patient_phone: str,
     insurance_type: str,
     reason: str,
-    booked_by: str = "Portal Web Paciente",
 ) -> tuple[bool, str, dict | None]:
     """
-    Registra una nueva cita médica en uno de los 16 cupos del Consultorio de Medicina (Mañana o Tarde).
-    Valida disponibilidad, médico programado en CE y no duplicidad de DNI en la misma fecha.
+    Valida estrictamente todos los datos del paciente y la disponibilidad del cupo ANTES
+    de confirmar o grabar la cita:
+    a) Documento de identidad: DNI o Carné de Extranjería (CE), SOLO NÚMEROS.
+       - Si es DNI: siempre exactamente 8 dígitos numéricos (el primero puede ser 0).
+       - Si es Carné de Extranjería (CE): solo números (entre 8 y 12 dígitos).
+    b) Número de celular: obligatorio de exactamente 9 dígitos numéricos.
+    e) Solamente una (01) cita a la semana por documento de identidad y verificación de
+       coincidencia en el nombre; de existir, indica acudir presencialmente al Servicio de Admisión.
     """
-    dni_clean = patient_dni.strip()
-    names_clean = patient_names.strip().upper()
-    phone_digits = "".join(ch for ch in (patient_phone or "") if ch.isdigit())
-    phone_clean = phone_digits if phone_digits else patient_phone.strip()
+    doc_type_clean = "CE" if "CE" in (patient_doc_type or "").upper() or "EXTRANJER" in (patient_doc_type or "").upper() else "DNI"
+    dni_clean = (patient_dni or "").strip()
+    names_clean = (patient_names or "").strip().upper()
+    phone_clean = (patient_phone or "").strip()
     reason_clean = (reason or "Consulta de Medicina General").strip()
 
-    if not dni_clean or len(dni_clean) < 8 or not dni_clean.isalnum():
-        return False, "El número de DNI / Documento debe tener al menos 8 caracteres válidos.", None
+    # Validación a) Documento de identidad: solo números
+    if not dni_clean or not dni_clean.isdigit():
+        return (
+            False,
+            f"El número de {doc_type_clean} debe contener ÚNICAMENTE números (sin letras, espacios ni guiones).",
+            None,
+        )
 
-    if not names_clean or len(names_clean) < 5:
-        return False, "Por favor ingresa los Apellidos y Nombres completos del paciente.", None
+    if doc_type_clean == "DNI":
+        if len(dni_clean) != 8:
+            return (
+                False,
+                f"El DNI debe tener siempre exactamente 8 dígitos numéricos (ingresaste {len(dni_clean)} dígitos). Recuerda que el primer dígito puede ser 0.",
+                None,
+            )
+    else:
+        if len(dni_clean) < 8 or len(dni_clean) > 12:
+            return (
+                False,
+                f"El Carné de Extranjería (CE) debe contener solo números (entre 8 y 12 dígitos; ingresaste {len(dni_clean)}).",
+                None,
+            )
 
-    if len(phone_digits) < 9:
-        return False, "Por favor ingresa un número de Celular / WhatsApp válido (9 dígitos, ej. 987654321) para enviarte tu Ticket de Cita.", None
+    if not names_clean or len(names_clean) < 5 or len(_normalize_name_tokens(names_clean)) < 2:
+        return False, "Por favor ingresa los Apellidos y Nombres completos del paciente (mínimo un apellido y un nombre).", None
+
+    # Validación b) Número celular: 9 dígitos obligatorios, solo números
+    if not phone_clean or not phone_clean.isdigit() or len(phone_clean) != 9:
+        return (
+            False,
+            f"El número de celular es obligatorio y debe tener exactamente 9 dígitos numéricos (ingresaste '{phone_clean}').",
+            None,
+        )
 
     if slot_number < 1 or slot_number > MAX_SLOTS_PER_SHIFT:
         return False, f"El número de cupo debe estar entre 1 y {MAX_SLOTS_PER_SHIFT}.", None
@@ -632,35 +695,144 @@ def book_appointment(
     if not slot_obj or not slot_obj["is_available"]:
         return (
             False,
-            f"El Cupo #{slot_number} ({slot_obj['label'] if slot_obj else ''}) ya se encuentra ocupado. Por favor elige otro horario.",
+            f"El Cupo #{slot_number:02d} ({slot_obj['label'] if slot_obj else ''}) ya se encuentra ocupado. Por favor elige otro horario.",
             None,
         )
 
     date_iso = day_data["date_iso"]
     doc = shift_data["titular_doctor"]
 
+    # Calcular el rango de la semana calendario (Lunes a Domingo) de la fecha solicitada
+    target_dt = date(year, month, day)
+    week_start = target_dt - timedelta(days=target_dt.weekday())  # Lunes
+    week_end = week_start + timedelta(days=6)                    # Domingo
+    week_start_iso = week_start.isoformat()
+    week_end_iso = week_end.isoformat()
+
     with get_connection() as conn:
-        # Verificar que el paciente no tenga ya una cita activa en el mismo día
-        existing_dni = conn.execute(
+        # 1. Verificar consistencia histórica de identidad (mismo Documento pero distinto Nombre)
+        prev_doc_row = conn.execute(
             """
-            SELECT ticket_code, shift_period, slot_number, slot_time
+            SELECT patient_names, patient_doc_type, patient_dni
             FROM appointments
-            WHERE appointment_date = ? AND patient_dni = ? AND status IN ('reservada', 'atendida')
+            WHERE patient_dni = ? AND status != 'cancelada'
+            ORDER BY id DESC LIMIT 1
             """,
-            (date_iso, dni_clean),
+            (dni_clean,),
         ).fetchone()
 
-        if existing_dni:
-            turno_txt = "Mañana" if existing_dni["shift_period"] == "M" else "Tarde"
+        if prev_doc_row and not _names_match(prev_doc_row["patient_names"], names_clean):
             return (
                 False,
-                f"El paciente con DNI {dni_clean} ya cuenta con una cita activa para el día {date_iso} "
-                f"(Turno {turno_txt} - Cupo #{existing_dni['slot_number']} [{existing_dni['slot_time']}], "
-                f"Ticket: {existing_dni['ticket_code']}).",
+                f"⚠️ DISCREPANCIA DE IDENTIDAD: El documento {doc_type_clean} {dni_clean} ya se encuentra registrado en el sistema "
+                f"bajo el nombre '{prev_doc_row['patient_names']}', el cual no coincide con '{names_clean}'. "
+                f"Por favor verifique sus datos o solicite su cita de manera presencial a través del Servicio de Admisión en el Centro de Salud Su Santidad Juan Pablo II.",
                 None,
             )
 
-        # Doble verificación atómica del cupo
+        # 2. Verificar restricción de MÁXIMO 1 CITA A LA SEMANA por Documento de Identidad o Coincidencia en el Nombre
+        week_rows = conn.execute(
+            """
+            SELECT ticket_code, appointment_date, shift_period, slot_number, slot_time,
+                   patient_doc_type, patient_dni, patient_names
+            FROM appointments
+            WHERE appointment_date BETWEEN ? AND ?
+              AND status IN ('reservada', 'atendida')
+            ORDER BY appointment_date ASC
+            """,
+            (week_start_iso, week_end_iso),
+        ).fetchall()
+
+        for w_row in week_rows:
+            same_doc = (w_row["patient_dni"] == dni_clean)
+            same_name = _names_match(w_row["patient_names"], names_clean)
+            if same_doc or same_name:
+                turno_txt = "Mañana" if w_row["shift_period"] == "M" else "Tarde"
+                doc_lbl = w_row["patient_doc_type"] if "patient_doc_type" in w_row.keys() and w_row["patient_doc_type"] else doc_type_clean
+                motivo_coincidencia = (
+                    "Documento de Identidad y Nombre"
+                    if (same_doc and same_name)
+                    else ("Documento de Identidad" if same_doc else "Coincidencia en el Nombre del Paciente")
+                )
+                return (
+                    False,
+                    f"⚠️ RESTRICCIÓN DE 1 CITA POR SEMANA ({motivo_coincidencia}): "
+                    f"El paciente {w_row['patient_names']} ({doc_lbl}: {w_row['patient_dni']}) ya registra una cita programada en esta semana "
+                    f"(del {week_start_iso} al {week_end_iso}) para el día {w_row['appointment_date']} en el Turno {turno_txt} — "
+                    f"Cupo #{w_row['slot_number']:02d} ({w_row['slot_time']} hrs), Ticket: {w_row['ticket_code']}. "
+                    f"Por normativa del establecimiento solo se puede reservar UNA (01) cita a la semana por internet. "
+                    f"De requerir una atención adicional, debe solicitar la cita a través del Servicio de Admisión de manera presencial en el Centro de Salud Su Santidad Juan Pablo II.",
+                    None,
+                )
+
+    return (
+        True,
+        "Datos validados correctamente.",
+        {
+            "year": year,
+            "month": month,
+            "day": day,
+            "date_iso": date_iso,
+            "weekday_name": day_data["day_meta"]["weekday_name"],
+            "shift_period": shift_period,
+            "shift_name": shift_data["shift_name"],
+            "consultorio_title": shift_data["consultorio_title"],
+            "slot_number": slot_number,
+            "slot_time": slot_obj["label"],
+            "doctor_id": doc["doctor_id"],
+            "doctor_name": doc["doctor_name"],
+            "doctor_cmp": doc["doctor_cmp"],
+            "patient_doc_type": doc_type_clean,
+            "patient_dni": dni_clean,
+            "patient_names": names_clean,
+            "patient_age": int(patient_age),
+            "patient_phone": phone_clean,
+            "insurance_type": insurance_type,
+            "reason": reason_clean,
+        },
+    )
+
+
+def book_appointment(
+    year: int,
+    month: int,
+    day: int,
+    shift_period: str,
+    slot_number: int,
+    patient_dni: str,
+    patient_names: str,
+    patient_age: int,
+    patient_phone: str,
+    insurance_type: str,
+    reason: str,
+    booked_by: str = "Portal Web Paciente",
+    patient_doc_type: str = "DNI",
+) -> tuple[bool, str, dict | None]:
+    """
+    Registra una nueva cita médica en uno de los 16 cupos del Consultorio de Medicina (Mañana o Tarde).
+    Valida documento (DNI 8 dígitos con soporte para 0 inicial o CE numérico), celular de 9 dígitos,
+    disponibilidad, médico programado en CE y no duplicidad en la misma fecha.
+    """
+    ok_val, msg_val, vdata = validate_booking_data(
+        year=year,
+        month=month,
+        day=day,
+        shift_period=shift_period,
+        slot_number=slot_number,
+        patient_doc_type=patient_doc_type,
+        patient_dni=patient_dni,
+        patient_names=patient_names,
+        patient_age=patient_age,
+        patient_phone=patient_phone,
+        insurance_type=insurance_type,
+        reason=reason,
+    )
+    if not ok_val or not vdata:
+        return False, msg_val, None
+
+    date_iso = vdata["date_iso"]
+
+    with get_connection() as conn:
         existing_slot = conn.execute(
             """
             SELECT id FROM appointments
@@ -672,7 +844,6 @@ def book_appointment(
         if existing_slot:
             return False, "El cupo seleccionado acaba de ser reservado por otro usuario.", None
 
-        # Generar código único de ticket institucional
         base_code = f"JP2-{year:04d}{month:02d}{day:02d}-{shift_period}{slot_number:02d}"
         ticket_code = base_code
         suffix = 1
@@ -687,9 +858,9 @@ def book_appointment(
                 ticket_code, year, month, day, appointment_date,
                 shift_period, slot_number, slot_time,
                 doctor_id, doctor_name, doctor_cmp,
-                patient_dni, patient_names, patient_age, patient_phone,
+                patient_doc_type, patient_dni, patient_names, patient_age, patient_phone,
                 insurance_type, reason, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'reservada')
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'reservada')
             """,
             (
                 ticket_code,
@@ -699,24 +870,25 @@ def book_appointment(
                 date_iso,
                 shift_period,
                 slot_number,
-                slot_obj["label"],
-                doc["doctor_id"],
-                doc["doctor_name"],
-                doc["doctor_cmp"],
-                dni_clean,
-                names_clean,
-                patient_age,
-                phone_clean,
-                insurance_type,
-                reason_clean,
+                vdata["slot_time"],
+                vdata["doctor_id"],
+                vdata["doctor_name"],
+                vdata["doctor_cmp"],
+                vdata["patient_doc_type"],
+                vdata["patient_dni"],
+                vdata["patient_names"],
+                vdata["patient_age"],
+                vdata["patient_phone"],
+                vdata["insurance_type"],
+                vdata["reason"],
             ),
         )
         new_id = cursor.lastrowid
         log_audit(
             booked_by,
             "Reserva de Cita Médica",
-            f"Ticket {ticket_code} | Fecha {date_iso} ({shift_period} Cupo #{slot_number} {slot_obj['label']}) | "
-            f"Paciente: {names_clean} (DNI {dni_clean}) | Médico: {doc['doctor_name']}",
+            f"Ticket {ticket_code} | Fecha {date_iso} ({shift_period} Cupo #{slot_number:02d} {vdata['slot_time']}) | "
+            f"Paciente: {vdata['patient_names']} ({vdata['patient_doc_type']} {vdata['patient_dni']}) | Médico: {vdata['doctor_name']}",
             conn=conn,
         )
         conn.commit()
