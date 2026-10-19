@@ -38,6 +38,7 @@ from schedule_sync import (
     MAX_SLOTS_PER_SHIFT,
     MORNING_SLOTS,
     AFTERNOON_SLOTS,
+    get_peru_today,
     sync_from_external_turnos_db,
     ensure_month_schedule,
     get_day_ce_consultorios,
@@ -467,7 +468,7 @@ with st.sidebar:
     st.markdown("---")
 
     st.subheader("📅 Periodo de Programación")
-    today = date.today()
+    today = get_peru_today()
     default_year = today.year if today.year in (2026, 2027) else 2026
     default_month = today.month
 
@@ -664,7 +665,12 @@ with tab_reservar:
             format_func=lambda dnum: next(
                 (
                     f"📅 {dm['weekday_name'].upper()} {dm['day']:02d}/{selected_month:02d}/{selected_year}"
-                    + (f" — 🎉 {dm['holiday_name']}" if dm["is_holiday"] else "")
+                    + (
+                        " — ⛔ FECHA PASADA"
+                        if date(selected_year, selected_month, dm["day"]) < today
+                        else (" — 🟢 HOY" if date(selected_year, selected_month, dm["day"]) == today else " — 🟢 DISPONIBLE")
+                    )
+                    + (f" (🎉 {dm['holiday_name']})" if dm["is_holiday"] else "")
                     for dm in working_days_meta
                     if dm["day"] == dnum
                 ),
@@ -672,19 +678,31 @@ with tab_reservar:
             ),
         )
 
+    selected_date_obj = date(selected_year, selected_month, selected_day_num)
+    is_past_date = selected_date_obj < today
+
     day_consultorios = get_day_ce_consultorios(selected_year, selected_month, selected_day_num)
     m_info = day_consultorios["morning"]
     t_info = day_consultorios["afternoon"]
     sel_day_meta = day_consultorios["day_meta"]
 
     with col_sel_day:
-        html_sel_pill = (
-            f'<div class="selected-date-pill">'
-            f'<div class="selected-date-pill-label">📌 Fecha seleccionada para tu atención:</div>'
-            f'<div class="selected-date-pill-value">'
-            f'🗓️ {sel_day_meta["weekday_name"]} {selected_day_num:02d} de {meses_nombres[selected_month]} de {selected_year}'
-            f'</div></div>'
-        )
+        if is_past_date:
+            html_sel_pill = (
+                f'<div class="selected-date-pill" style="background:linear-gradient(135deg,#991b1b 0%,#7f1d1d 100%);border-color:#f87171;">'
+                f'<div class="selected-date-pill-label" style="color:#fecaca;">⛔ FECHA PASADA (NO HABILITADA PARA CITAS):</div>'
+                f'<div class="selected-date-pill-value">'
+                f'🗓️ {sel_day_meta["weekday_name"]} {selected_day_num:02d} de {meses_nombres[selected_month]} de {selected_year}'
+                f'</div></div>'
+            )
+        else:
+            html_sel_pill = (
+                f'<div class="selected-date-pill">'
+                f'<div class="selected-date-pill-label">📌 Fecha seleccionada para tu atención:</div>'
+                f'<div class="selected-date-pill-value">'
+                f'🗓️ {sel_day_meta["weekday_name"]} {selected_day_num:02d} de {meses_nombres[selected_month]} de {selected_year}'
+                f'</div></div>'
+            )
         st.markdown(html_sel_pill, unsafe_allow_html=True)
 
     with col_summary_day:
@@ -692,18 +710,18 @@ with tab_reservar:
         k1.metric(
             "🌅 Cupos Libres Mañana (08:00-12:00)",
             f"{m_info['available_slots']} / 16",
-            delta="Consultorio Activo" if m_info["is_enabled"] else "Sin turno CE",
-            delta_color="normal" if m_info["available_slots"] > 0 else "off",
+            delta="Fecha Pasada (Cerrado)" if is_past_date else ("Consultorio Activo" if m_info["is_enabled"] else "Sin turno CE"),
+            delta_color="off" if (is_past_date or m_info["available_slots"] == 0) else "normal",
         )
         k2.metric(
             "🌇 Cupos Libres Tarde (14:00-18:00)",
             f"{t_info['available_slots']} / 16",
-            delta="Consultorio Activo" if t_info["is_enabled"] else "Sin turno CE",
-            delta_color="normal" if t_info["available_slots"] > 0 else "off",
+            delta="Fecha Pasada (Cerrado)" if is_past_date else ("Consultorio Activo" if t_info["is_enabled"] else "Sin turno CE"),
+            delta_color="off" if (is_past_date or t_info["available_slots"] == 0) else "normal",
         )
         k3.metric(
             "🏥 Total Cupos Disponibles en el Día",
-            f"{day_consultorios['total_available_day']} / 32",
+            "0 / 32 (Cerrado)" if is_past_date else f"{day_consultorios['total_available_day']} / 32",
             delta=f"{day_consultorios['total_occupied_day']} reservados",
         )
 
@@ -797,147 +815,179 @@ with tab_reservar:
     st.markdown("---")
     st.subheader("📝 Paso 2: Elige tu Turno, Horario (cada 15 min) y Registra tus Datos")
 
-    available_shifts = []
-    if m_info["is_enabled"] and m_info["available_slots"] > 0:
-        available_shifts.append("M")
-    if t_info["is_enabled"] and t_info["available_slots"] > 0:
-        available_shifts.append("T")
-
-    if not available_shifts:
-        st.warning(
-            "No quedan cupos disponibles en Consultorio de Medicina (CE) para la fecha seleccionada. "
-            "Por favor selecciona otro día en el Paso 1."
+    if is_past_date:
+        html_past_err = (
+            f'<div class="presencial-alert-box">'
+            f'<div style="font-size:18px; font-weight:800; margin-bottom:6px;">'
+            f'⛔ FECHA PASADA: NO SE PERMITE GENERAR CITAS EN FECHAS ANTERIORES A HOY</div>'
+            f'<div style="font-size:15px; line-height:1.55;">'
+            f'La fecha que has escogido (<strong>{sel_day_meta["weekday_name"]} {selected_day_num:02d}/{selected_month:02d}/{selected_year}</strong>) '
+            f'ya ha transcurrido (fecha actual: <strong>{today.strftime("%d/%m/%Y")}</strong>).<br>'
+            f'👉 Por favor sube al <strong>Paso 1</strong> y selecciona el día de hoy o una fecha futura para poder registrar tu cita médica.'
+            f'</div></div>'
         )
+        st.markdown(html_past_err, unsafe_allow_html=True)
     else:
-        col_grid, col_form = st.columns([1.3, 1.7])
+        available_shifts = []
+        if m_info["is_enabled"] and m_info["available_slots"] > 0:
+            available_shifts.append("M")
+        if t_info["is_enabled"] and t_info["available_slots"] > 0:
+            available_shifts.append("T")
 
-        with col_grid:
-            chosen_shift = st.radio(
-                "Selecciona el Consultorio / Turno de Atención:",
-                available_shifts,
-                format_func=lambda sp: (
-                    f"🌅 Turno Mañana (08:00 - 12:00) — {m_info['titular_doctor']['doctor_name']} ({m_info['available_slots']} libres)"
-                    if sp == "M"
-                    else f"🌇 Turno Tarde (14:00 - 18:00) — {t_info['titular_doctor']['doctor_name']} ({t_info['available_slots']} libres)"
-                ),
-                horizontal=False,
+        if not available_shifts:
+            st.warning(
+                "No quedan cupos disponibles en Consultorio de Medicina (CE) para la fecha seleccionada. "
+                "Por favor selecciona otro día en el Paso 1."
             )
+        else:
+            col_grid, col_form = st.columns([1.3, 1.7])
 
-            active_shift_info = m_info if chosen_shift == "M" else t_info
-            st.markdown(
-                f"**⏰ Tablero de 16 Cupos ({active_shift_info['hours_range']} — cada 15 min):**"
-            )
-
-            grid_cols = st.columns(4)
-            for idx, sl in enumerate(active_shift_info["slots"]):
-                with grid_cols[idx % 4]:
-                    if sl["is_available"]:
-                        st.markdown(
-                            f'<div class="slot-pill-free">Cupo #{sl["slot_number"]:02d}<br>{sl["label"]}<br>🟢 LIBRE</div>',
-                            unsafe_allow_html=True,
-                        )
-                    else:
-                        st.markdown(
-                            f'<div class="slot-pill-busy">Cupo #{sl["slot_number"]:02d}<br>{sl["label"]}<br>🔴 OCUPADO</div>',
-                            unsafe_allow_html=True,
-                        )
-
-        with col_form:
-            free_slots_list = [s for s in active_shift_info["slots"] if s["is_available"]]
-            with st.form("booking_patient_form", clear_on_submit=False):
-                st.markdown(
-                    f"#### 🎫 Datos del Paciente — Turno {active_shift_info['shift_name']} "
-                    f"({day_consultorios['date_iso']})"
-                )
-                st.caption(
-                    f"Médico Asignado: **{active_shift_info['titular_doctor']['doctor_name']}** "
-                    f"(CMP: {active_shift_info['titular_doctor']['doctor_cmp']}) | "
-                    "📌 *Recuerda: Solo se permite 1 cita por semana por paciente.*"
-                )
-
-                selected_slot_num = st.selectbox(
-                    "⏰ Selecciona tu Cupo y Horario (bloques de 15 minutos):",
-                    [s["slot_number"] for s in free_slots_list],
-                    format_func=lambda snum: next(
-                        (
-                            f"Cupo #{s['slot_number']:02d} — Horario: {s['label']} hrs"
-                            for s in free_slots_list
-                            if s["slot_number"] == snum
-                        ),
-                        str(snum),
+            with col_grid:
+                chosen_shift = st.radio(
+                    "Selecciona el Consultorio / Turno de Atención:",
+                    available_shifts,
+                    format_func=lambda sp: (
+                        f"🌅 Turno Mañana (08:00 - 12:00) — {m_info['titular_doctor']['doctor_name']} ({m_info['available_slots']} libres)"
+                        if sp == "M"
+                        else f"🌇 Turno Tarde (14:00 - 18:00) — {t_info['titular_doctor']['doctor_name']} ({t_info['available_slots']} libres)"
                     ),
+                    horizontal=False,
                 )
 
-                doc_col1, doc_col2, doc_col3 = st.columns([1.15, 1.35, 0.8])
-                with doc_col1:
-                    inp_doc_type = st.selectbox(
-                        "🪪 Tipo de Documento (*):",
-                        ["DNI", "CE"],
-                        format_func=lambda x: "DNI (8 dígitos)" if x == "DNI" else "Carné de Extranjería (CE)",
-                    )
-                with doc_col2:
-                    inp_dni = st.text_input(
-                        "🔢 N° de Documento (Solo números) (*):",
-                        max_chars=12,
-                        placeholder="DNI: 8 dígitos (ej. 08451236)",
-                        help="Si es DNI debe tener exactamente 8 dígitos numéricos (el primero puede ser 0). Si es CE, solo números.",
-                    )
-                with doc_col3:
-                    inp_age = st.number_input("🎂 Edad (años):", min_value=0, max_value=120, value=30, step=1)
-
-                inp_names = st.text_input(
-                    "👤 Apellidos y Nombres Completos del Paciente (*):",
-                    placeholder="Ej. PEREZ GOMEZ, JUAN CARLOS",
+                active_shift_info = m_info if chosen_shift == "M" else t_info
+                st.markdown(
+                    f"**⏰ Tablero de 16 Cupos ({active_shift_info['hours_range']} — cada 15 min):**"
                 )
 
-                f_col3, f_col4 = st.columns(2)
-                with f_col3:
-                    inp_insurance = st.selectbox(
-                        "🛡️ Tipo de Seguro / Financiamiento:",
-                        ["SIS (Seguro Integral de Salud)", "Pagante / Particular", "Exonerado / Otro"],
+                grid_cols = st.columns(4)
+                for idx, sl in enumerate(active_shift_info["slots"]):
+                    with grid_cols[idx % 4]:
+                        if sl["is_available"]:
+                            st.markdown(
+                                f'<div class="slot-pill-free">Cupo #{sl["slot_number"]:02d}<br>{sl["label"]}<br>🟢 LIBRE</div>',
+                                unsafe_allow_html=True,
+                            )
+                        else:
+                            st.markdown(
+                                f'<div class="slot-pill-busy">Cupo #{sl["slot_number"]:02d}<br>{sl["label"]}<br>🔴 OCUPADO</div>',
+                                unsafe_allow_html=True,
+                            )
+
+            with col_form:
+                free_slots_list = [s for s in active_shift_info["slots"] if s["is_available"]]
+                with st.form("booking_patient_form", clear_on_submit=False):
+                    st.markdown(
+                        f"#### 🎫 Datos del Paciente — Turno {active_shift_info['shift_name']} "
+                        f"({day_consultorios['date_iso']})"
                     )
-                with f_col4:
-                    inp_phone = st.text_input(
-                        "📱 Celular de 9 dígitos (Obligatorio) (*):",
-                        max_chars=9,
-                        placeholder="9 dígitos (ej. 987654321)",
-                        help="Obligatorio: exactamente 9 dígitos numéricos.",
+                    st.caption(
+                        f"Médico Asignado: **{active_shift_info['titular_doctor']['doctor_name']}** "
+                        f"(CMP: {active_shift_info['titular_doctor']['doctor_cmp']}) | "
+                        "⚠️ **Todos los campos con (*) son obligatorios y deben llenarse por completo.**"
                     )
 
-                inp_reason = st.text_input(
-                    "🩺 Motivo de Consulta Médica:",
-                    placeholder="Ej. Control médico general, cefalea, hipertensión, evaluación...",
-                )
-
-                submit_verify = st.form_submit_button(
-                    "🔎 Verificar mis Datos para Sacar la Cita",
-                    use_container_width=True,
-                    type="primary",
-                )
-
-                if submit_verify:
-                    ok_v, msg_v, v_payload = validate_booking_data(
-                        year=selected_year,
-                        month=selected_month,
-                        day=selected_day_num,
-                        shift_period=chosen_shift,
-                        slot_number=selected_slot_num,
-                        patient_doc_type=inp_doc_type,
-                        patient_dni=inp_dni,
-                        patient_names=inp_names,
-                        patient_age=int(inp_age),
-                        patient_phone=inp_phone,
-                        insurance_type=inp_insurance.split(" ")[0],
-                        reason=inp_reason,
+                    selected_slot_num = st.selectbox(
+                        "⏰ Selecciona tu Cupo y Horario (bloques de 15 minutos) (*):",
+                        [s["slot_number"] for s in free_slots_list],
+                        format_func=lambda snum: next(
+                            (
+                                f"Cupo #{s['slot_number']:02d} — Horario: {s['label']} hrs"
+                                for s in free_slots_list
+                                if s["slot_number"] == snum
+                            ),
+                            str(snum),
+                        ),
                     )
-                    if ok_v and v_payload:
-                        st.session_state["booking_error_banner"] = None
-                        st.session_state["pending_booking"] = v_payload
-                        st.session_state["show_preconfirm_modal"] = True
-                        st.rerun()
-                    else:
-                        st.session_state["booking_error_banner"] = msg_v
-                        st.rerun()
+
+                    doc_col1, doc_col2, doc_col3 = st.columns([1.15, 1.35, 0.85])
+                    with doc_col1:
+                        inp_doc_type = st.selectbox(
+                            "🪪 Tipo de Documento (*):",
+                            ["DNI", "CE"],
+                            format_func=lambda x: "DNI (8 dígitos)" if x == "DNI" else "Carné de Extranjería (CE)",
+                        )
+                    with doc_col2:
+                        inp_dni = st.text_input(
+                            "🔢 N° de Documento (Solo números) (*):",
+                            max_chars=12,
+                            placeholder="DNI: 8 dígitos (ej. 08451236)",
+                            help="Obligatorio. Si es DNI debe tener exactamente 8 dígitos numéricos (el primero puede ser 0). Si es CE, solo números.",
+                        )
+                    with doc_col3:
+                        inp_age = st.number_input(
+                            "🎂 Edad (años) (*):",
+                            min_value=0,
+                            max_value=120,
+                            value=None,
+                            step=1,
+                            placeholder="Ej. 35",
+                            help="Obligatorio: ingresa la edad del paciente en años.",
+                        )
+
+                    inp_names = st.text_input(
+                        "👤 Apellidos y Nombres Completos del Paciente (*):",
+                        placeholder="Obligatorio: Ej. PEREZ GOMEZ, JUAN CARLOS",
+                    )
+
+                    f_col3, f_col4 = st.columns(2)
+                    with f_col3:
+                        inp_insurance = st.selectbox(
+                            "🛡️ Tipo de Seguro / Financiamiento (*):",
+                            [
+                                "-- Selecciona tu Seguro --",
+                                "SIS (Seguro Integral de Salud)",
+                                "Pagante / Particular",
+                                "Exonerado / Otro",
+                            ],
+                        )
+                    with f_col4:
+                        inp_phone = st.text_input(
+                            "📱 Celular de 9 dígitos (Obligatorio) (*):",
+                            max_chars=9,
+                            placeholder="9 dígitos (ej. 987654321)",
+                            help="Obligatorio: exactamente 9 dígitos numéricos.",
+                        )
+
+                    inp_reason = st.text_input(
+                        "🩺 Motivo de Consulta Médica (*):",
+                        placeholder="Obligatorio: Ej. Control médico general, cefalea, hipertensión...",
+                    )
+
+                    submit_verify = st.form_submit_button(
+                        "🔎 Verificar mis Datos para Sacar la Cita",
+                        use_container_width=True,
+                        type="primary",
+                    )
+
+                    if submit_verify:
+                        ins_val = (
+                            ""
+                            if inp_insurance.startswith("--")
+                            else inp_insurance.split(" ")[0]
+                        )
+                        ok_v, msg_v, v_payload = validate_booking_data(
+                            year=selected_year,
+                            month=selected_month,
+                            day=selected_day_num,
+                            shift_period=chosen_shift,
+                            slot_number=selected_slot_num,
+                            patient_doc_type=inp_doc_type,
+                            patient_dni=inp_dni,
+                            patient_names=inp_names,
+                            patient_age=inp_age,
+                            patient_phone=inp_phone,
+                            insurance_type=ins_val,
+                            reason=inp_reason,
+                            check_past_date=True,
+                        )
+                        if ok_v and v_payload:
+                            st.session_state["booking_error_banner"] = None
+                            st.session_state["pending_booking"] = v_payload
+                            st.session_state["show_preconfirm_modal"] = True
+                            st.rerun()
+                        else:
+                            st.session_state["booking_error_banner"] = msg_v
+                            st.rerun()
 
 # ===================================================================
 # PESTAÑA 2: CONSULTAR / CANCELAR MI CITA

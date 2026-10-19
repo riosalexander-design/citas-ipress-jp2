@@ -53,6 +53,18 @@ def run_tests():
     )
     assert ok_bad_phone is False and "9 dígitos" in msg_bad_phone
 
+    # Probar rechazo cuando la fecha es pasada (ej. 01/01/2026)
+    ok_past, msg_past, _ = validate_booking_data(
+        2026, 1, 5, "M", 1, "DNI", "08123456", "RAMIREZ SOTO, CARLOS", 40, "987654321", "SIS", "Control médico"
+    )
+    assert ok_past is False and "FECHA PASADA" in msg_past
+
+    # Probar rechazo cuando falta llenar algún campo obligatorio (ej. Edad vacía o Motivo vacío)
+    ok_inc, msg_inc, _ = validate_booking_data(
+        2026, 10, 19, "M", 1, "DNI", "08123456", "RAMIREZ SOTO, CARLOS", None, "987654321", "-- Selecciona tu Seguro --", ""
+    )
+    assert ok_inc is False and "CAMPOS INCOMPLETOS" in msg_inc
+
     # c) Probar validación previa (para ventana en grande) con DNI que empieza con 0 ('08123456')
     ok_pre, _, pre_payload = validate_booking_data(
         2026, 10, 19, "M", 1, "DNI", "08123456", "RAMIREZ SOTO, CARLOS", 40, "999888777", "SIS", "Control preventivo"

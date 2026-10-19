@@ -8,9 +8,17 @@ para el Consultorio Externo de Medicina (CE) del C.S. Su Santidad Juan Pablo II.
 import os
 import sqlite3
 import unicodedata
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from database import get_connection, find_external_turnos_db, log_audit
 from holidays_pe import get_month_info
+
+PERU_TZ = timezone(timedelta(hours=-5))
+
+
+def get_peru_today() -> date:
+    """Retorna la fecha actual en hora oficial del Perú (UTC-5)."""
+    return datetime.now(PERU_TZ).date()
+
 
 MAX_SLOTS_PER_SHIFT = 16
 
@@ -623,14 +631,17 @@ def validate_booking_data(
     patient_doc_type: str,
     patient_dni: str,
     patient_names: str,
-    patient_age: int,
+    patient_age: int | None,
     patient_phone: str,
     insurance_type: str,
     reason: str,
+    check_past_date: bool = True,
 ) -> tuple[bool, str, dict | None]:
     """
     Valida estrictamente todos los datos del paciente y la disponibilidad del cupo ANTES
     de confirmar o grabar la cita:
+    - Prohibido generar citas en fechas pasadas (anteriores a la fecha actual).
+    - Todos los campos solicitados al paciente deben estar llenados por completo.
     a) Documento de identidad: DNI o Carné de Extranjería (CE), SOLO NÚMEROS.
        - Si es DNI: siempre exactamente 8 dígitos numéricos (el primero puede ser 0).
        - Si es Carné de Extranjería (CE): solo números (entre 8 y 12 dígitos).
@@ -638,14 +649,61 @@ def validate_booking_data(
     e) Solamente una (01) cita a la semana por documento de identidad y verificación de
        coincidencia en el nombre; de existir, indica acudir presencialmente al Servicio de Admisión.
     """
-    doc_type_clean = "CE" if "CE" in (patient_doc_type or "").upper() or "EXTRANJER" in (patient_doc_type or "").upper() else "DNI"
+    # 0. Validar que la fecha seleccionada NO sea una fecha pasada
+    target_dt = date(year, month, day)
+    today_pe = get_peru_today()
+    if check_past_date and target_dt < today_pe:
+        return (
+            False,
+            f"⛔ FECHA PASADA NO PERMITIDA: La fecha escogida ({day:02d}/{month:02d}/{year}) ya pasó (fecha actual: {today_pe.strftime('%d/%m/%Y')}). "
+            f"No se permite generar citas en fechas pasadas. Por favor selecciona el día de hoy o una fecha futura en el Paso 1.",
+            None,
+        )
+
+    doc_type_raw = (patient_doc_type or "").strip()
     dni_clean = (patient_dni or "").strip()
     names_clean = (patient_names or "").strip().upper()
     phone_clean = (patient_phone or "").strip()
-    reason_clean = (reason or "Consulta de Medicina General").strip()
+    insurance_clean = (insurance_type or "").strip()
+    reason_clean = (reason or "").strip()
+
+    # Verificar que TODOS los campos solicitados al paciente hayan sido llenados por completo
+    missing_fields = []
+    if not doc_type_raw or doc_type_raw.startswith("--"):
+        missing_fields.append("Tipo de Documento (DNI / CE)")
+    if not dni_clean:
+        missing_fields.append("N° de Documento de Identidad")
+    if patient_age is None or str(patient_age).strip() == "":
+        missing_fields.append("Edad del Paciente")
+    if not names_clean:
+        missing_fields.append("Apellidos y Nombres Completos")
+    if not insurance_clean or insurance_clean.startswith("--"):
+        missing_fields.append("Tipo de Seguro / Financiamiento")
+    if not phone_clean:
+        missing_fields.append("Número de Celular (9 dígitos)")
+    if not reason_clean:
+        missing_fields.append("Motivo de Consulta Médica")
+
+    if missing_fields:
+        return (
+            False,
+            "⚠️ CAMPOS INCOMPLETOS: No se puede generar la cita porque todos los campos solicitados al paciente deben ser llenados por completo. "
+            f"Falta completar: {', '.join(missing_fields)}.",
+            None,
+        )
+
+    doc_type_clean = "CE" if ("CE" in doc_type_raw.upper() or "EXTRANJER" in doc_type_raw.upper()) else "DNI"
+
+    # Validar edad numérica válida
+    try:
+        age_int = int(patient_age)
+        if age_int < 0 or age_int > 120:
+            return False, "La Edad del paciente debe estar entre 0 y 120 años.", None
+    except (ValueError, TypeError):
+        return False, "Por favor ingresa una Edad válida en años.", None
 
     # Validación a) Documento de identidad: solo números
-    if not dni_clean or not dni_clean.isdigit():
+    if not dni_clean.isdigit():
         return (
             False,
             f"El número de {doc_type_clean} debe contener ÚNICAMENTE números (sin letras, espacios ni guiones).",
@@ -667,14 +725,26 @@ def validate_booking_data(
                 None,
             )
 
-    if not names_clean or len(names_clean) < 5 or len(_normalize_name_tokens(names_clean)) < 2:
-        return False, "Por favor ingresa los Apellidos y Nombres completos del paciente (mínimo un apellido y un nombre).", None
+    if len(names_clean) < 5 or len(_normalize_name_tokens(names_clean)) < 2:
+        return (
+            False,
+            "Por favor ingresa los Apellidos y Nombres completos del paciente (mínimo un apellido y un nombre).",
+            None,
+        )
 
     # Validación b) Número celular: 9 dígitos obligatorios, solo números
-    if not phone_clean or not phone_clean.isdigit() or len(phone_clean) != 9:
+    if not phone_clean.isdigit() or len(phone_clean) != 9:
         return (
             False,
             f"El número de celular es obligatorio y debe tener exactamente 9 dígitos numéricos (ingresaste '{phone_clean}').",
+            None,
+        )
+
+    # Validar motivo de consulta completo
+    if len(reason_clean) < 3:
+        return (
+            False,
+            "Por favor describe el Motivo de Consulta Médica completo (mínimo 3 caracteres).",
             None,
         )
 
@@ -703,7 +773,6 @@ def validate_booking_data(
     doc = shift_data["titular_doctor"]
 
     # Calcular el rango de la semana calendario (Lunes a Domingo) de la fecha solicitada
-    target_dt = date(year, month, day)
     week_start = target_dt - timedelta(days=target_dt.weekday())  # Lunes
     week_end = week_start + timedelta(days=6)                    # Domingo
     week_start_iso = week_start.isoformat()
@@ -785,9 +854,9 @@ def validate_booking_data(
             "patient_doc_type": doc_type_clean,
             "patient_dni": dni_clean,
             "patient_names": names_clean,
-            "patient_age": int(patient_age),
+            "patient_age": age_int,
             "patient_phone": phone_clean,
-            "insurance_type": insurance_type,
+            "insurance_type": insurance_clean,
             "reason": reason_clean,
         },
     )
@@ -801,17 +870,19 @@ def book_appointment(
     slot_number: int,
     patient_dni: str,
     patient_names: str,
-    patient_age: int,
+    patient_age: int | None,
     patient_phone: str,
     insurance_type: str,
     reason: str,
     booked_by: str = "Portal Web Paciente",
     patient_doc_type: str = "DNI",
+    check_past_date: bool = True,
 ) -> tuple[bool, str, dict | None]:
     """
     Registra una nueva cita médica en uno de los 16 cupos del Consultorio de Medicina (Mañana o Tarde).
-    Valida documento (DNI 8 dígitos con soporte para 0 inicial o CE numérico), celular de 9 dígitos,
-    disponibilidad, médico programado en CE y no duplicidad en la misma fecha.
+    Valida que la fecha no sea pasada, que todos los campos estén completos, documento (DNI 8 dígitos
+    con soporte para 0 inicial o CE numérico), celular de 9 dígitos, disponibilidad, médico programado
+    en CE y máximo 1 cita por semana.
     """
     ok_val, msg_val, vdata = validate_booking_data(
         year=year,
@@ -826,6 +897,7 @@ def book_appointment(
         patient_phone=patient_phone,
         insurance_type=insurance_type,
         reason=reason,
+        check_past_date=check_past_date,
     )
     if not ok_val or not vdata:
         return False, msg_val, None
