@@ -7,6 +7,7 @@ echo ========================================================
 echo   PUBLICANDO PROYECTO CITAS MEDICINA JP2 EN GITHUB
 echo   Usuario: riosalexander-design
 echo   Repositorio: citas-ipress-jp2
+echo   Web Streamlit: https://citascsjp2.streamlit.app/
 echo ========================================================
 echo.
 echo 1. Guardando cambios locales...
@@ -19,7 +20,8 @@ echo.
 if %ERRORLEVEL% equ 0 (
     echo ========================================================
     echo   EXITO: Tu codigo ya esta publicado en:
-    echo   https://github.com/riosalexander-design/citas-ipress-jp2
+    echo   GitHub:    https://github.com/riosalexander-design/citas-ipress-jp2
+    echo   Streamlit: https://citascsjp2.streamlit.app/
     echo ========================================================
 ) else (
     echo.

@@ -66,7 +66,8 @@ def generate_whatsapp_info(appointment: dict) -> dict:
         f"──────────────────────\n"
         f"📌 *INDICACIONES IMPORTANTES:*\n"
         f"1. Acudir a Admisión *20 minutos antes* de su horario ({appointment['slot_time']}).\n"
-        f"2. Presentar su *{doc_type_lbl} físico* y mostrar este mensaje o su ticket en ventanilla."
+        f"2. Presentar su *{doc_type_lbl} físico* y mostrar este mensaje o su ticket en ventanilla.\n"
+        f"🌐 *Portal Web de Citas:* https://citascsjp2.streamlit.app/"
     )
 
     wa_phone = format_peru_whatsapp_number(appointment.get("patient_phone", ""))
@@ -315,7 +316,7 @@ def generate_ticket_html(appointment: dict) -> str:
             <strong>📌 Indicaciones para el Paciente:</strong><br>
             1. Acuda a Admisión del C.S. Su Santidad Juan Pablo II <strong>20 minutos antes</strong> de su horario ({appointment['slot_time']}).<br>
             2. Presente su <strong>{doc_type_lbl} físico</strong> y muestre este comprobante o el mensaje de WhatsApp en ventanilla.<br>
-            3. Programación sincronizada con el Rol Asistencial Oficial (<a href="https://turnos-ipress.streamlit.app/" target="_blank">turnos-ipress.streamlit.app</a>).
+            3. Portal Oficial de Citas: <a href="https://citascsjp2.streamlit.app/" target="_blank"><strong>citascsjp2.streamlit.app</strong></a> | Rol Asistencial: <a href="https://turnos-ipress.streamlit.app/" target="_blank">turnos-ipress.streamlit.app</a>.
         </div>
     </div>
 </body>
