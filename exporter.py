@@ -1,11 +1,12 @@
 """
 exporter.py
-Generador de reportes en Excel (.xlsx) para Admisión / Jefatura Médica y
-comprobantes imprimibles (HTML) de Citas Médicas para el C.S. Su Santidad Juan Pablo II.
+Generador de reportes en Excel (.xlsx) para Admisión / Jefatura Médica,
+enlaces y mensajes directos a WhatsApp (+51), y comprobantes imprimibles (HTML/PDF)
+de Citas Médicas para el C.S. Su Santidad Juan Pablo II.
 """
 
 import io
-from datetime import datetime
+import urllib.parse
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
@@ -13,8 +14,78 @@ from schedule_sync import get_day_ce_consultorios, get_month_ce_overview
 from holidays_pe import get_month_info
 
 
+def format_peru_whatsapp_number(raw_phone: str) -> str:
+    """
+    Normaliza el teléfono del paciente al formato internacional de Perú (51 + 9 dígitos)
+    para enlaces oficiales de WhatsApp (wa.me).
+    """
+    digits = "".join(ch for ch in (raw_phone or "") if ch.isdigit())
+    if not digits:
+        return ""
+    if len(digits) == 9 and digits.startswith("9"):
+        return f"51{digits}"
+    if len(digits) == 11 and digits.startswith("51"):
+        return digits
+    return digits
+
+
+def generate_whatsapp_info(appointment: dict) -> dict:
+    """
+    Genera el texto oficial de la constancia de cita para WhatsApp y el enlace
+    directo wa.me hacia el número de celular registrado por el paciente.
+    """
+    turno_label = (
+        "MAÑANA (08:00 a 12:00 hrs)"
+        if appointment["shift_period"] == "M"
+        else "TARDE (14:00 a 18:00 hrs)"
+    )
+    consultorio_label = (
+        "Consultorio de Medicina N° 1 (Mañana)"
+        if appointment["shift_period"] == "M"
+        else "Consultorio de Medicina N° 2 (Tarde)"
+    )
+
+    msg = (
+        f"🏥 *C.S. SU SANTIDAD JUAN PABLO II*\n"
+        f"*CONSTANCIA OFICIAL DE CITA MÉDICA*\n"
+        f"──────────────────────\n"
+        f"🎫 *Código de Ticket:* `{appointment['ticket_code']}`\n"
+        f"📅 *Fecha de Atención:* *{appointment['appointment_date']}*\n"
+        f"⏰ *Horario Exacto:* *{appointment['slot_time']} hrs*\n"
+        f"🔢 *Cupo Asignado:* *Cupo #{appointment['slot_number']:02d} de 16* ({turno_label})\n"
+        f"🚪 *Consultorio:* {consultorio_label}\n"
+        f"👨‍⚕️ *Médico Cirujano:* {appointment['doctor_name']} (CMP: {appointment['doctor_cmp']})\n"
+        f"──────────────────────\n"
+        f"👤 *Paciente:* {appointment['patient_names']}\n"
+        f"🪪 *DNI / Doc.:* {appointment['patient_dni']} (Edad: {appointment.get('patient_age') or '-'} años)\n"
+        f"🛡️ *Seguro:* {appointment.get('insurance_type', 'SIS')}\n"
+        f"🩺 *Motivo:* {appointment.get('reason') or 'Consulta de Medicina General'}\n"
+        f"──────────────────────\n"
+        f"📌 *INDICACIONES IMPORTANTES:*\n"
+        f"1. Acudir a Admisión *20 minutos antes* de su horario ({appointment['slot_time']}).\n"
+        f"2. Presentar su *DNI físico* y mostrar este mensaje o su ticket en ventanilla."
+    )
+
+    wa_phone = format_peru_whatsapp_number(appointment.get("patient_phone", ""))
+    encoded_text = urllib.parse.quote(msg)
+
+    if wa_phone:
+        wa_url = f"https://wa.me/{wa_phone}?text={encoded_text}"
+        display_phone = f"+{wa_phone[:2]} {wa_phone[2:]}" if wa_phone.startswith("51") else f"+{wa_phone}"
+    else:
+        wa_url = f"https://wa.me/?text={encoded_text}"
+        display_phone = "Seleccionar contacto"
+
+    return {
+        "phone_normalized": wa_phone,
+        "display_phone": display_phone,
+        "message_text": msg,
+        "wa_url": wa_url,
+    }
+
+
 def generate_ticket_html(appointment: dict) -> str:
-    """Genera un comprobante HTML listo para imprimir o guardar como ticket de cita médica."""
+    """Genera un comprobante HTML listo para imprimir, guardar en PDF o enviar por WhatsApp."""
     turno_label = (
         "MAÑANA (08:00 a 12:00 hrs)"
         if appointment["shift_period"] == "M"
@@ -26,6 +97,14 @@ def generate_ticket_html(appointment: dict) -> str:
         else "Consultorio de Medicina N° 2 (Turno Tarde)"
     )
     status_upper = appointment.get("status", "reservada").upper()
+    wa_info = generate_whatsapp_info(appointment)
+
+    qr_payload = urllib.parse.quote(
+        f"CS-JP2|{appointment['ticket_code']}|DNI:{appointment['patient_dni']}|"
+        f"FECHA:{appointment['appointment_date']}|HORA:{appointment['slot_time']}|"
+        f"CUPO:{appointment['slot_number']}|MED:{appointment['doctor_cmp']}"
+    )
+    qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=130x130&data={qr_payload}"
 
     return f"""<!DOCTYPE html>
 <html lang="es">
@@ -40,13 +119,13 @@ def generate_ticket_html(appointment: dict) -> str:
         color: #0f172a;
     }}
     .ticket-box {{
-        max-width: 580px;
+        max-width: 620px;
         margin: 0 auto;
         background: #ffffff;
         border: 2px solid #0284c7;
         border-radius: 14px;
         overflow: hidden;
-        box-shadow: 0 10px 25px rgba(2, 132, 199, 0.12);
+        box-shadow: 0 10px 25px rgba(2, 132, 199, 0.14);
     }}
     .header {{
         background: linear-gradient(135deg, #0369a1 0%, #0f172a 100%);
@@ -62,25 +141,25 @@ def generate_ticket_html(appointment: dict) -> str:
     .header p {{
         margin: 4px 0 0 0;
         font-size: 12.5px;
-        opacity: 0.9;
+        opacity: 0.92;
     }}
     .ticket-code-banner {{
         background-color: #e0f2fe;
         border-bottom: 1px dashed #7dd3fc;
-        padding: 12px 20px;
+        padding: 12px 22px;
         display: flex;
         justify-content: space-between;
         align-items: center;
     }}
     .code-val {{
-        font-size: 18px;
+        font-size: 19px;
         font-weight: 800;
         color: #0369a1;
     }}
     .status-badge {{
         background-color: #dcfce7;
         color: #166534;
-        padding: 4px 10px;
+        padding: 5px 12px;
         border-radius: 999px;
         font-size: 12px;
         font-weight: 700;
@@ -88,6 +167,33 @@ def generate_ticket_html(appointment: dict) -> str:
     }}
     .content {{
         padding: 20px 24px;
+    }}
+    .top-grid {{
+        display: flex;
+        gap: 16px;
+        align-items: center;
+        margin-bottom: 14px;
+    }}
+    .highlight-slot {{
+        flex: 1;
+        background-color: #f8fafc;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        padding: 12px 16px;
+        text-align: center;
+    }}
+    .highlight-slot .big-time {{
+        font-size: 19px;
+        font-weight: 800;
+        color: #0f172a;
+        margin-top: 3px;
+    }}
+    .qr-box {{
+        text-align: center;
+        padding: 8px;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        background: #ffffff;
     }}
     .row {{
         display: flex;
@@ -99,18 +205,30 @@ def generate_ticket_html(appointment: dict) -> str:
     .row strong {{
         color: #334155;
     }}
-    .highlight-slot {{
-        background-color: #f8fafc;
-        border: 1px solid #cbd5e1;
-        border-radius: 10px;
-        padding: 12px 16px;
-        margin: 12px 0;
-        text-align: center;
+    .actions {{
+        display: flex;
+        gap: 10px;
+        margin-top: 16px;
     }}
-    .highlight-slot .big-time {{
-        font-size: 20px;
-        font-weight: 800;
-        color: #0f172a;
+    .btn {{
+        flex: 1;
+        display: inline-block;
+        padding: 12px;
+        text-align: center;
+        text-decoration: none;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: bold;
+        cursor: pointer;
+    }}
+    .btn-print {{
+        background-color: #0284c7;
+        color: white;
+    }}
+    .btn-wa {{
+        background-color: #16a34a;
+        color: white;
     }}
     .footer {{
         background-color: #f8fafc;
@@ -119,23 +237,9 @@ def generate_ticket_html(appointment: dict) -> str:
         color: #475569;
         border-top: 1px solid #e2e8f0;
     }}
-    .print-btn {{
-        display: block;
-        width: 100%;
-        padding: 12px;
-        margin-top: 15px;
-        background-color: #0284c7;
-        color: white;
-        text-align: center;
-        border: none;
-        border-radius: 8px;
-        font-size: 14px;
-        font-weight: bold;
-        cursor: pointer;
-    }}
     @media print {{
         body {{ background: white; padding: 0; }}
-        .print-btn {{ display: none; }}
+        .actions {{ display: none; }}
     }}
 </style>
 </head>
@@ -153,15 +257,21 @@ def generate_ticket_html(appointment: dict) -> str:
             <span class="status-badge">{status_upper}</span>
         </div>
         <div class="content">
-            <div class="highlight-slot">
-                <div style="font-size:12px; color:#64748b; text-transform:uppercase; font-weight:700;">
-                    Fecha y Hora Exacta de Atención
+            <div class="top-grid">
+                <div class="highlight-slot">
+                    <div style="font-size:11.5px; color:#64748b; text-transform:uppercase; font-weight:700;">
+                        Fecha y Hora Exacta de Atención
+                    </div>
+                    <div class="big-time">
+                        📅 {appointment['appointment_date']}<br>⏰ {appointment['slot_time']} hrs
+                    </div>
+                    <div style="font-size:13.5px; color:#0369a1; font-weight:700; margin-top:5px;">
+                        CUPO N° {appointment['slot_number']:02d} de 16 — TURNO {turno_label}
+                    </div>
                 </div>
-                <div class="big-time">
-                    📅 {appointment['appointment_date']} &nbsp;|&nbsp; ⏰ {appointment['slot_time']}
-                </div>
-                <div style="font-size:13.5px; color:#0369a1; font-weight:700; margin-top:4px;">
-                    CUPO N° {appointment['slot_number']} de 16 — TURNO {turno_label}
+                <div class="qr-box">
+                    <img src="{qr_url}" width="110" height="110" alt="QR Cita" />
+                    <div style="font-size:10px; color:#64748b; margin-top:2px;">Verificación QR</div>
                 </div>
             </div>
             <div class="row">
@@ -185,19 +295,22 @@ def generate_ticket_html(appointment: dict) -> str:
                 <span>{appointment.get('insurance_type', 'SIS')}</span>
             </div>
             <div class="row">
-                <strong>Teléfono de Contacto:</strong>
+                <strong>Celular / WhatsApp:</strong>
                 <span>{appointment.get('patient_phone') or '-'}</span>
             </div>
             <div class="row">
                 <strong>Motivo de Consulta:</strong>
                 <span>{appointment.get('reason') or 'Consulta de Medicina General'}</span>
             </div>
-            <button class="print-btn" onclick="window.print()">🖨️ Imprimir Comprobante de Cita</button>
+            <div class="actions">
+                <button class="btn btn-print" onclick="window.print()">🖨️ Imprimir / Guardar en PDF</button>
+                <a class="btn btn-wa" href="{wa_info['wa_url']}" target="_blank">📲 Enviar a mi WhatsApp ({wa_info['display_phone']})</a>
+            </div>
         </div>
         <div class="footer">
             <strong>📌 Indicaciones para el Paciente:</strong><br>
             1. Acuda a Admisión del C.S. Su Santidad Juan Pablo II <strong>20 minutos antes</strong> de su horario ({appointment['slot_time']}).<br>
-            2. Presente su <strong>DNI físico</strong> y este código de ticket (impreso o en su celular).<br>
+            2. Presente su <strong>DNI físico</strong> y muestre este comprobante o el mensaje de WhatsApp en ventanilla.<br>
             3. Programación sincronizada con el Rol Asistencial Oficial (<a href="https://turnos-ipress.streamlit.app/" target="_blank">turnos-ipress.streamlit.app</a>).
         </div>
     </div>
@@ -217,7 +330,6 @@ def generate_daily_padron_excel(year: int, month: int, day: int) -> io.BytesIO:
     ws = wb.active
     ws.title = f"Padron_{day:02d}_{month:02d}_{year}"
 
-    # Estilos
     title_fill = PatternFill("solid", fgColor="0F172A")
     sub_fill = PatternFill("solid", fgColor="0369A1")
     morning_hdr_fill = PatternFill("solid", fgColor="1E40AF")
@@ -236,7 +348,6 @@ def generate_daily_padron_excel(year: int, month: int, day: int) -> io.BytesIO:
     thin_side = Side(border_style="thin", color="CBD5E1")
     border_cell = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
 
-    # Encabezado Institucional
     ws.merge_cells("A1:J1")
     ws["A1"] = "CENTRO DE SALUD SU SANTIDAD JUAN PABLO II - PADRÓN DIARIO DE CITAS DE MEDICINA (CE)"
     ws["A1"].fill = title_fill
@@ -327,12 +438,10 @@ def generate_daily_padron_excel(year: int, month: int, day: int) -> io.BytesIO:
 
         current_row += 2
 
-    # Ajustar anchos de columna
     col_widths = [11, 16, 20, 14, 34, 8, 12, 14, 28, 16]
     for idx, width in enumerate(col_widths, start=1):
         ws.column_dimensions[get_column_letter(idx)].width = width
 
-    # Segunda Hoja: Resumen Mensual de Consultorios de Medicina (CE)
     ws_month = wb.create_sheet(title=f"Rol_CE_{month_info['month_name']}_{year}")
     ws_month.merge_cells("A1:H1")
     ws_month["A1"] = (

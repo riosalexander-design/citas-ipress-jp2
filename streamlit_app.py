@@ -5,11 +5,13 @@ Centro de Salud Su Santidad Juan Pablo II.
 Sincronizado con la programación asistencial de https://turnos-ipress.streamlit.app/
 - Consultorio de Medicina Mañana (08:00 a 12:00): 16 cupos (cada 15 minutos)
 - Consultorio de Medicina Tarde  (14:00 a 18:00): 16 cupos (cada 15 minutos)
+Incluye entrega inmediata al paciente mediante Descarga de Comprobante con QR y Mensaje a WhatsApp (+51).
 """
 
 import os
 import tempfile
 import importlib
+import urllib.parse
 from datetime import datetime, date
 import pandas as pd
 import streamlit as st
@@ -24,7 +26,7 @@ importlib.reload(holidays_pe)
 importlib.reload(schedule_sync)
 importlib.reload(exporter)
 
-from database import init_db, get_connection, hash_pin, log_audit, find_external_turnos_db
+from database import init_db, get_connection, hash_pin, log_audit
 from holidays_pe import get_month_info
 from schedule_sync import (
     MAX_SLOTS_PER_SHIFT,
@@ -41,7 +43,11 @@ from schedule_sync import (
     set_consultorio_override,
     clear_consultorio_override,
 )
-from exporter import generate_ticket_html, generate_daily_padron_excel
+from exporter import (
+    generate_ticket_html,
+    generate_whatsapp_info,
+    generate_daily_padron_excel,
+)
 
 # Inicializar Base de Datos
 init_db()
@@ -125,25 +131,13 @@ st.markdown(
         font-weight: 700;
         margin-bottom: 6px;
     }
-    .ticket-card {
-        background-color: #f0f9ff;
+    .voucher-modal-box {
+        background: linear-gradient(180deg, #f0f9ff 0%, #ffffff 100%);
         border: 2px solid #0284c7;
-        border-radius: 12px;
-        padding: 18px 22px;
-        margin-top: 12px;
+        border-radius: 14px;
+        padding: 18px 20px;
+        margin-bottom: 14px;
     }
-    .badge-shift {
-        display: inline-block;
-        padding: 2px 6px;
-        border-radius: 6px;
-        font-size: 11px;
-        font-weight: bold;
-    }
-    .badge-M-CE { background-color: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
-    .badge-T-CE { background-color: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
-    .badge-12h  { background-color: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
-    .badge-DES  { background-color: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; }
-    .badge-other { background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
 </style>
 """,
     unsafe_allow_html=True,
@@ -153,6 +147,88 @@ if "staff_user" not in st.session_state:
     st.session_state["staff_user"] = None
 if "last_booked_ticket" not in st.session_state:
     st.session_state["last_booked_ticket"] = None
+if "show_ticket_modal" not in st.session_state:
+    st.session_state["show_ticket_modal"] = False
+
+
+# -------------------------------------------------------------------
+# VENTANA MODAL EMERGENTE CON EL COMPROBANTE Y ENVÍO A WHATSAPP
+# -------------------------------------------------------------------
+@st.dialog("🎫 ¡Cita Confirmada! Recibe tu Comprobante y Mensaje de WhatsApp", width="large")
+def show_appointment_voucher_dialog(tk: dict):
+    t_nom = "MAÑANA (08:00 a 12:00 hrs)" if tk["shift_period"] == "M" else "TARDE (14:00 a 18:00 hrs)"
+    cons_nom = (
+        "Consultorio de Medicina N° 1 (Turno Mañana)"
+        if tk["shift_period"] == "M"
+        else "Consultorio de Medicina N° 2 (Turno Tarde)"
+    )
+    wa_info = generate_whatsapp_info(tk)
+    html_voucher = generate_ticket_html(tk)
+
+    qr_payload = urllib.parse.quote(
+        f"CS-JP2|{tk['ticket_code']}|DNI:{tk['patient_dni']}|"
+        f"FECHA:{tk['appointment_date']}|HORA:{tk['slot_time']}|CUPO:{tk['slot_number']}"
+    )
+    qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=140x140&data={qr_payload}"
+
+    st.success(
+        f"✅ **¡Tu cita ha sido reservada exitosamente!** Código Oficial: **`{tk['ticket_code']}`**"
+    )
+
+    col_info, col_qr = st.columns([2.6, 1])
+    with col_info:
+        st.markdown(
+            f"""
+            <div class="voucher-modal-box">
+                <div style="font-size:12px; font-weight:700; color:#0369a1; text-transform:uppercase;">
+                    🏥 C.S. Su Santidad Juan Pablo II — Servicio de Medicina General
+                </div>
+                <div style="font-size:20px; font-weight:800; color:#0f172a; margin:4px 0;">
+                    📅 {tk['appointment_date']} &nbsp;|&nbsp; ⏰ {tk['slot_time']} hrs
+                </div>
+                <div style="font-size:14px; font-weight:700; color:#166534; margin-bottom:8px;">
+                    🔢 Cupo N° {tk['slot_number']:02d} de 16 — Turno {t_nom} ({cons_nom})
+                </div>
+                <div style="font-size:13.5px; color:#1e293b; line-height:1.55;">
+                    👨‍⚕️ <strong>Médico Cirujano:</strong> {tk['doctor_name']} (CMP: <code>{tk['doctor_cmp']}</code>)<br>
+                    👤 <strong>Paciente:</strong> {tk['patient_names']} (DNI: <code>{tk['patient_dni']}</code> — {tk.get('patient_age') or '-'} años)<br>
+                    🛡️ <strong>Seguro:</strong> {tk.get('insurance_type', 'SIS')} &nbsp;|&nbsp;
+                    📱 <strong>WhatsApp:</strong> {wa_info['display_phone']}<br>
+                    🩺 <strong>Motivo:</strong> {tk.get('reason') or 'Consulta de Medicina General'}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with col_qr:
+        st.image(qr_url, caption=f"QR {tk['ticket_code']}", width=135)
+
+    st.markdown("#### 👇 Recibe tu Constancia de Cita por ambos medios:")
+    btn_col1, btn_col2 = st.columns(2)
+    with btn_col1:
+        st.link_button(
+            f"📲 1. Enviar Constancia a mi WhatsApp ({wa_info['display_phone']})",
+            url=wa_info["wa_url"],
+            use_container_width=True,
+            type="primary",
+        )
+    with btn_col2:
+        st.download_button(
+            "📥 2. Descargar Ticket Oficial (Imprimible / PDF)",
+            data=html_voucher.encode("utf-8"),
+            file_name=f"Ticket_{tk['ticket_code']}.html",
+            mime="text/html",
+            use_container_width=True,
+            type="secondary",
+        )
+
+    with st.expander("📋 Ver texto del mensaje de WhatsApp (para copiar o reenviar)"):
+        st.code(wa_info["message_text"], language=None)
+
+    st.caption(
+        "📌 **Recuerda:** Acude a Admisión del C.S. Su Santidad Juan Pablo II **20 minutos antes** de tu horario "
+        f"(`{tk['slot_time']}`) portando tu **DNI físico** y mostrando tu mensaje de WhatsApp o tu Ticket descargado."
+    )
 
 
 def get_all_doctors():
@@ -259,6 +335,11 @@ with st.sidebar:
             st.session_state["staff_user"] = None
             st.rerun()
 
+# Disparar automáticamente la ventana emergente cuando se acaba de reservar una cita
+if st.session_state.get("show_ticket_modal") and st.session_state.get("last_booked_ticket"):
+    st.session_state["show_ticket_modal"] = False
+    show_appointment_voucher_dialog(st.session_state["last_booked_ticket"])
+
 # -------------------------------------------------------------------
 # BANNER PRINCIPAL
 # -------------------------------------------------------------------
@@ -270,7 +351,7 @@ st.markdown(
         <strong>Servicio de Medicina General (Consultorio Externo - CE)</strong> &nbsp;|&nbsp;
         🌅 <strong>Consultorio Mañana:</strong> 16 cupos (08:00 a 12:00, cada 15 min) &nbsp;|&nbsp;
         🌇 <strong>Consultorio Tarde:</strong> 16 cupos (14:00 a 18:00, cada 15 min) &nbsp;|&nbsp;
-        🔗 Programación sincronizada con <a href="https://turnos-ipress.streamlit.app/" target="_blank" style="color:#7dd3fc; font-weight:bold;">turnos-ipress.streamlit.app</a>
+        📲 <strong>Confirmación por Descarga + WhatsApp</strong>
     </p>
 </div>
 """,
@@ -296,38 +377,43 @@ tab_reservar, tab_consultar, tab_rol, tab_admision = st.tabs(
 # PESTAÑA 1: SACAR CITA POR INTERNET (PORTAL DEL PACIENTE)
 # ===================================================================
 with tab_reservar:
-    # Mostrar ticket recién generado si existe
+    # Mostrar también tarjeta fija con botón de descarga y WhatsApp si acaba de reservar
     if st.session_state["last_booked_ticket"] is not None:
         tk = st.session_state["last_booked_ticket"]
+        wa_info = generate_whatsapp_info(tk)
+        html_voucher = generate_ticket_html(tk)
         t_nom = "MAÑANA (08:00 - 12:00)" if tk["shift_period"] == "M" else "TARDE (14:00 - 18:00)"
-        st.success(f"✅ **¡Tu cita fue registrada exitosamente!** Código de Ticket Oficial: **`{tk['ticket_code']}`**")
         with st.container(border=True):
-            c_tk1, c_tk2, c_tk3 = st.columns([2, 2, 1.3])
+            st.markdown(
+                f"### 🎫 Constancia de tu Cita Reservada — Código: `{tk['ticket_code']}`"
+            )
+            c_tk1, c_tk2, c_tk3 = st.columns([1.8, 1.8, 1.5])
             with c_tk1:
-                st.markdown(f"**🎫 Ticket:** `{tk['ticket_code']}`")
                 st.markdown(f"**👤 Paciente:** {tk['patient_names']} (DNI: `{tk['patient_dni']}`)")
-                st.markdown(f"**🛡️ Seguro:** {tk['insurance_type']} | **📞 Teléfono:** {tk.get('patient_phone') or '-'}")
+                st.markdown(f"**📱 WhatsApp:** `{wa_info['display_phone']}` | **🛡️ Seguro:** {tk['insurance_type']}")
             with c_tk2:
-                st.markdown(f"**📅 Fecha de Atención:** `{tk['appointment_date']}`")
-                st.markdown(f"**⏰ Horario Asignado:** **`{tk['slot_time']}` (Cupo #{tk['slot_number']} de 16 - Turno {t_nom})**")
-                st.markdown(f"**👨‍⚕️ Médico Cirujano:** {tk['doctor_name']} (CMP: `{tk['doctor_cmp']}`)")
+                st.markdown(f"**📅 Fecha:** `{tk['appointment_date']}` | **⏰ Hora:** **`{tk['slot_time']}` (Cupo #{tk['slot_number']:02d}/16 - {t_nom})**")
+                st.markdown(f"**👨‍⚕️ Médico:** {tk['doctor_name']} (CMP: `{tk['doctor_cmp']}`)")
             with c_tk3:
-                html_voucher = generate_ticket_html(tk)
-                st.download_button(
-                    "📥 Descargar Ticket Imprimible (.html)",
-                    data=html_voucher.encode("utf-8"),
-                    file_name=f"Ticket_{tk['ticket_code']}.html",
-                    mime="text/html",
+                st.link_button(
+                    f"📲 Enviar a mi WhatsApp ({wa_info['display_phone']})",
+                    url=wa_info["wa_url"],
                     use_container_width=True,
                     type="primary",
                 )
-                if st.button("✖️ Cerrar Aviso", use_container_width=True):
-                    st.session_state["last_booked_ticket"] = None
-                    st.rerun()
+                st.download_button(
+                    "📥 Descargar Ticket (.html / PDF)",
+                    data=html_voucher.encode("utf-8"),
+                    file_name=f"Ticket_{tk['ticket_code']}.html",
+                    mime="text/html",
+                    key="banner_dl_btn",
+                    use_container_width=True,
+                )
+                if st.button("🔍 Ver Ventana del Ticket con QR", use_container_width=True):
+                    show_appointment_voucher_dialog(tk)
 
     st.subheader(f"📌 Paso 1: Selecciona la Fecha de Atención ({meses_nombres[selected_month]} {selected_year})")
 
-    # Determinar día predeterminado (hoy si pertenece al mes seleccionado y no es domingo, o el primer día hábil)
     working_days_meta = [d for d in days_list if not d["is_sunday"]]
     default_day_idx = 0
     if selected_year == today.year and selected_month == today.month:
@@ -411,7 +497,10 @@ with tab_reservar:
                 """,
                 unsafe_allow_html=True,
             )
-            st.progress(m_info["occupied_slots"] / 16.0, text=f"Ocupación Mañana: {m_info['occupied_slots']}/16 cupos reservados")
+            st.progress(
+                m_info["occupied_slots"] / 16.0,
+                text=f"Ocupación Mañana: {m_info['occupied_slots']}/16 cupos reservados",
+            )
         else:
             st.markdown(
                 """
@@ -461,7 +550,10 @@ with tab_reservar:
                 """,
                 unsafe_allow_html=True,
             )
-            st.progress(t_info["occupied_slots"] / 16.0, text=f"Ocupación Tarde: {t_info['occupied_slots']}/16 cupos reservados")
+            st.progress(
+                t_info["occupied_slots"] / 16.0,
+                text=f"Ocupación Tarde: {t_info['occupied_slots']}/16 cupos reservados",
+            )
         else:
             st.markdown(
                 """
@@ -483,7 +575,6 @@ with tab_reservar:
     st.markdown("---")
     st.subheader("📝 Paso 2: Elige tu Turno, Horario (cada 15 min) y Registra tus Datos")
 
-    # Determinar turnos habilitados con cupos libres
     available_shifts = []
     if m_info["is_enabled"] and m_info["available_slots"] > 0:
         available_shifts.append("M")
@@ -512,10 +603,9 @@ with tab_reservar:
 
             active_shift_info = m_info if chosen_shift == "M" else t_info
             st.markdown(
-                f"** Tablero de 16 Cupos ({active_shift_info['hours_range']} — cada 15 min):**"
+                f"**⏰ Tablero de 16 Cupos ({active_shift_info['hours_range']} — cada 15 min):**"
             )
 
-            # Mostrar grilla 4x4 de los 16 cupos
             grid_cols = st.columns(4)
             for idx, sl in enumerate(active_shift_info["slots"]):
                 with grid_cols[idx % 4]:
@@ -543,7 +633,8 @@ with tab_reservar:
                 )
                 st.caption(
                     f"Médico Asignado: **{active_shift_info['titular_doctor']['doctor_name']}** "
-                    f"(CMP: {active_shift_info['titular_doctor']['doctor_cmp']})"
+                    f"(CMP: {active_shift_info['titular_doctor']['doctor_cmp']}) — "
+                    "Al confirmar recibirás tu **Ticket descargable con QR** y tu **Constancia por WhatsApp**."
                 )
 
                 selected_slot_num = st.selectbox(
@@ -582,9 +673,9 @@ with tab_reservar:
                     )
                 with f_col4:
                     inp_phone = st.text_input(
-                        "📱 Teléfono / Celular (WhatsApp):",
+                        "📱 Celular / WhatsApp del Paciente (*):",
                         max_chars=15,
-                        placeholder="Ej. 987654321",
+                        placeholder="Ej. 987654321 (para enviarte el Ticket)",
                     )
 
                 inp_reason = st.text_input(
@@ -593,7 +684,7 @@ with tab_reservar:
                 )
 
                 submit_book = st.form_submit_button(
-                    "✅ Confirmar y Generar Ticket de Cita",
+                    "✅ Confirmar Cita y Recibir Ticket + WhatsApp",
                     use_container_width=True,
                     type="primary",
                 )
@@ -615,6 +706,7 @@ with tab_reservar:
                     )
                     if ok:
                         st.session_state["last_booked_ticket"] = ticket_data
+                        st.session_state["show_ticket_modal"] = True
                         st.rerun()
                     else:
                         st.error(msg)
@@ -623,10 +715,10 @@ with tab_reservar:
 # PESTAÑA 2: CONSULTAR / CANCELAR MI CITA
 # ===================================================================
 with tab_consultar:
-    st.subheader("🔍 Consulta el Estado de tu Cita o Descarga tu Comprobante")
+    st.subheader("🔍 Consulta tu Cita, Descarga tu Ticket o Envíalo a tu WhatsApp")
     st.markdown(
         "Ingresa tu número de **DNI**, **Código de Ticket** (ej. `JP2-20261019-M01`) o **Apellidos** "
-        "para verificar tu horario, descargar tu ticket imprimible o cancelar tu cita si no podrás asistir."
+        "para verificar tu horario, descargar tu comprobante con QR, enviarlo a tu WhatsApp o cancelar tu cita."
     )
 
     c_search1, c_search2 = st.columns([3, 1])
@@ -659,20 +751,30 @@ with tab_consultar:
                     "cancelada": "⚪ CANCELADA",
                 }.get(app_item["status"], app_item["status"].upper())
 
+                wa_item = generate_whatsapp_info(app_item)
+                voucher_html = generate_ticket_html(app_item)
+
                 with st.container(border=True):
-                    r1, r2, r3 = st.columns([2, 2, 1.3])
+                    r1, r2, r3 = st.columns([1.9, 1.9, 1.5])
                     with r1:
                         st.markdown(f"**🎫 Ticket:** `{app_item['ticket_code']}` — **{status_icon}**")
                         st.markdown(f"**👤 Paciente:** {app_item['patient_names']} (DNI: `{app_item['patient_dni']}`)")
-                        st.markdown(f"**🛡️ Seguro:** {app_item['insurance_type']} | **Motivo:** {app_item.get('reason') or '-'}")
+                        st.markdown(
+                            f"**🛡️ Seguro:** {app_item['insurance_type']} | **📱 WhatsApp:** `{wa_item['display_phone']}`"
+                        )
                     with r2:
                         st.markdown(f"**📅 Fecha:** `{app_item['appointment_date']}` ({t_label})")
                         st.markdown(f"**⏰ Horario:** **`{app_item['slot_time']}` — Cupo #{app_item['slot_number']:02d} de 16**")
                         st.markdown(f"**👨‍⚕️ Médico:** {app_item['doctor_name']} (CMP: `{app_item['doctor_cmp']}`)")
                     with r3:
-                        voucher_html = generate_ticket_html(app_item)
+                        st.link_button(
+                            f"📲 Enviar a WhatsApp ({wa_item['display_phone']})",
+                            url=wa_item["wa_url"],
+                            use_container_width=True,
+                            type="primary",
+                        )
                         st.download_button(
-                            "📥 Descargar Ticket",
+                            "📥 Descargar Ticket (.html / PDF)",
                             data=voucher_html.encode("utf-8"),
                             file_name=f"Ticket_{app_item['ticket_code']}.html",
                             mime="text/html",
@@ -837,7 +939,7 @@ with tab_admision:
                         "Paciente": ap["patient_names"] if ap else "(Disponible)",
                         "Edad": ap["patient_age"] if (ap and ap.get("patient_age")) else "-",
                         "Seguro": ap["insurance_type"] if ap else "-",
-                        "Teléfono": ap["patient_phone"] if (ap and ap.get("patient_phone")) else "-",
+                        "WhatsApp": ap["patient_phone"] if (ap and ap.get("patient_phone")) else "-",
                     }
                 )
             st.dataframe(pd.DataFrame(padron_rows), use_container_width=True, hide_index=True, height=580)
@@ -845,7 +947,7 @@ with tab_admision:
     st.markdown("---")
     if st.session_state["staff_user"] is None:
         st.info(
-            "🔒 **Para registrar asistencia de pacientes ('Atendida' / 'No Asistió'), asignar médico titular en días con doble turno CE o subir una base de datos de Turnos-IPRESS**, inicia sesión en el panel izquierdo (**Acceso Admisión / Médicos**, PIN Admin: `admin2026`)."
+            "🔒 **Para registrar asistencia de pacientes ('Atendida' / 'No Asistió'), reenviar tickets por WhatsApp desde Admisión, asignar médico titular en días con doble turno CE o subir una base de datos de Turnos-IPRESS**, inicia sesión en el panel izquierdo (**Acceso Admisión / Médicos**, PIN Admin: `admin2026`)."
         )
     else:
         staff = st.session_state["staff_user"]
@@ -853,7 +955,7 @@ with tab_admision:
 
         adm_sub1, adm_sub2, adm_sub3 = st.tabs(
             [
-                "✅ Control de Asistencia de Citas del Día",
+                "✅ Control de Asistencia y Reenvío a WhatsApp",
                 "👨‍⚕️ Asignación / Contingencia de Consultorio CE",
                 "🔄 Importar Base de Datos de Turnos-IPRESS (.db)",
             ]
@@ -869,7 +971,7 @@ with tab_admision:
             if not booked_today:
                 st.caption("No hay citas reservadas en esta fecha para actualizar estado.")
             else:
-                c_up1, c_up2, c_up3 = st.columns([2.2, 1.2, 1])
+                c_up1, c_up2, c_up3, c_up4 = st.columns([2.1, 1.1, 0.9, 1.2])
                 with c_up1:
                     sel_app_id = st.selectbox(
                         "Seleccionar Cita del Día:",
@@ -877,13 +979,16 @@ with tab_admision:
                         format_func=lambda aid: next(
                             (
                                 f"[{a['shift_period']} Cupo #{a['slot_number']:02d} {a['slot_time']}] "
-                                f"{a['patient_names']} (DNI {a['patient_dni']}) — Estado: {a['status'].upper()}"
+                                f"{a['patient_names']} (DNI {a['patient_dni']}) — {a['status'].upper()}"
                                 for a in booked_today
                                 if a["id"] == aid
                             ),
                             str(aid),
                         ),
                     )
+                selected_app_obj = next((a for a in booked_today if a["id"] == sel_app_id), booked_today[0])
+                wa_adm = generate_whatsapp_info(selected_app_obj)
+
                 with c_up2:
                     new_st = st.selectbox(
                         "Nuevo Estado:",
@@ -905,6 +1010,14 @@ with tab_admision:
                             st.rerun()
                         else:
                             st.error(msg_u)
+                with c_up4:
+                    st.write("")
+                    st.write("")
+                    st.link_button(
+                        f"📲 WhatsApp ({wa_adm['display_phone']})",
+                        url=wa_adm["wa_url"],
+                        use_container_width=True,
+                    )
 
         with adm_sub2:
             st.markdown(

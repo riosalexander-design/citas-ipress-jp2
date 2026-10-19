@@ -602,7 +602,8 @@ def book_appointment(
     """
     dni_clean = patient_dni.strip()
     names_clean = patient_names.strip().upper()
-    phone_clean = patient_phone.strip()
+    phone_digits = "".join(ch for ch in (patient_phone or "") if ch.isdigit())
+    phone_clean = phone_digits if phone_digits else patient_phone.strip()
     reason_clean = (reason or "Consulta de Medicina General").strip()
 
     if not dni_clean or len(dni_clean) < 8 or not dni_clean.isalnum():
@@ -610,6 +611,9 @@ def book_appointment(
 
     if not names_clean or len(names_clean) < 5:
         return False, "Por favor ingresa los Apellidos y Nombres completos del paciente.", None
+
+    if len(phone_digits) < 9:
+        return False, "Por favor ingresa un número de Celular / WhatsApp válido (9 dígitos, ej. 987654321) para enviarte tu Ticket de Cita.", None
 
     if slot_number < 1 or slot_number > MAX_SLOTS_PER_SHIFT:
         return False, f"El número de cupo debe estar entre 1 y {MAX_SLOTS_PER_SHIFT}.", None

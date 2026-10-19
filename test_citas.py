@@ -75,9 +75,14 @@ def run_tests():
     )
     assert ok_dup is False, "No debe permitir dos citas el mismo día para el mismo DNI"
 
-    # Verificar generación de Ticket HTML y Excel
+    # Verificar generación de Ticket HTML, WhatsApp (+51) y Excel
+    from exporter import generate_whatsapp_info
+    wa_info = generate_whatsapp_info(ticket)
+    assert wa_info["phone_normalized"] == "51999888777"
+    assert "https://wa.me/51999888777?text=" in wa_info["wa_url"]
     html_str = generate_ticket_html(ticket)
     assert "C.S. SU SANTIDAD JUAN PABLO II" in html_str
+    assert "https://wa.me/51999888777" in html_str
     excel_io = generate_daily_padron_excel(2026, 10, 19)
     assert len(excel_io.getvalue()) > 1000
 
