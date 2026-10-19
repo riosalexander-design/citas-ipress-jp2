@@ -217,45 +217,27 @@ def show_pre_booking_confirmation_dialog(p_data: dict):
         else "Carné de Extranjería (CE)"
     )
 
-    st.markdown(
-        f"""
-        <div class="confirm-big-box">
-            <div class="confirm-big-item">
-                <span class="confirm-big-label">🪪 {doc_label}:</span>
-                <span class="confirm-big-val">{p_data['patient_dni']}</span>
-            </div>
-            <div class="confirm-big-item">
-                <span class="confirm-big-label">👤 Paciente:</span>
-                <span class="confirm-big-val">{p_data['patient_names']}</span>
-            </div>
-            <div class="confirm-big-item">
-                <span class="confirm-big-label">🎂 Edad / Seguro:</span>
-                <span class="confirm-big-val">{p_data['patient_age']} años &nbsp;|&nbsp; Seguro: {p_data['insurance_type']}</span>
-            </div>
-            <div class="confirm-big-item">
-                <span class="confirm-big-label">📱 Celular (WhatsApp):</span>
-                <span class="confirm-big-val">{p_data['patient_phone']}</span>
-            </div>
-            <div class="confirm-big-item">
-                <span class="confirm-big-label">📅 Fecha de la Cita:</span>
-                <span class="confirm-big-val">{p_data['weekday_name']} {p_data['date_iso']}</span>
-            </div>
-            <div class="confirm-big-item">
-                <span class="confirm-big-label">🏥 Consultorio y Turno:</span>
-                <span class="confirm-big-val">{p_data['consultorio_title']}</span>
-            </div>
-            <div class="confirm-big-item">
-                <span class="confirm-big-label">⏰ Cupo y Horario:</span>
-                <span class="confirm-big-val" style="color:#0369a1;">Cupo #{p_data['slot_number']:02d} de 16 &nbsp;({p_data['slot_time']} hrs)</span>
-            </div>
-            <div class="confirm-big-item" style="border-bottom:none;">
-                <span class="confirm-big-label">👨‍⚕️ Médico Cirujano:</span>
-                <span class="confirm-big-val">{p_data['doctor_name']} (CMP: {p_data['doctor_cmp']})</span>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    html_confirm = (
+        f'<div class="confirm-big-box">'
+        f'<div class="confirm-big-item"><span class="confirm-big-label">🪪 {doc_label}:</span>'
+        f'<span class="confirm-big-val">{p_data["patient_dni"]}</span></div>'
+        f'<div class="confirm-big-item"><span class="confirm-big-label">👤 Paciente:</span>'
+        f'<span class="confirm-big-val">{p_data["patient_names"]}</span></div>'
+        f'<div class="confirm-big-item"><span class="confirm-big-label">🎂 Edad / Seguro:</span>'
+        f'<span class="confirm-big-val">{p_data["patient_age"]} años &nbsp;|&nbsp; Seguro: {p_data["insurance_type"]}</span></div>'
+        f'<div class="confirm-big-item"><span class="confirm-big-label">📱 Celular (WhatsApp):</span>'
+        f'<span class="confirm-big-val">{p_data["patient_phone"]}</span></div>'
+        f'<div class="confirm-big-item"><span class="confirm-big-label">📅 Fecha de la Cita:</span>'
+        f'<span class="confirm-big-val">{p_data["weekday_name"]} {p_data["date_iso"]}</span></div>'
+        f'<div class="confirm-big-item"><span class="confirm-big-label">🏥 Consultorio y Turno:</span>'
+        f'<span class="confirm-big-val">{p_data["consultorio_title"]}</span></div>'
+        f'<div class="confirm-big-item"><span class="confirm-big-label">⏰ Cupo y Horario:</span>'
+        f'<span class="confirm-big-val" style="color:#0369a1;">Cupo #{p_data["slot_number"]:02d} de 16 &nbsp;({p_data["slot_time"]} hrs)</span></div>'
+        f'<div class="confirm-big-item" style="border-bottom:none;"><span class="confirm-big-label">👨‍⚕️ Médico Cirujano:</span>'
+        f'<span class="confirm-big-val">{p_data["doctor_name"]} (CMP: {p_data["doctor_cmp"]})</span></div>'
+        f'</div>'
     )
+    st.markdown(html_confirm, unsafe_allow_html=True)
 
     st.markdown("#### ❓ ¿Los datos mostrados arriba son correctos?")
 
@@ -330,29 +312,23 @@ def show_appointment_voucher_dialog(tk: dict):
 
     col_info, col_qr = st.columns([2.6, 1])
     with col_info:
-        st.markdown(
-            f"""
-            <div class="voucher-modal-box">
-                <div style="font-size:12px; font-weight:700; color:#0369a1; text-transform:uppercase;">
-                    🏥 C.S. Su Santidad Juan Pablo II — Servicio de Medicina General
-                </div>
-                <div style="font-size:20px; font-weight:800; color:#0f172a; margin:4px 0;">
-                    📅 {tk['appointment_date']} &nbsp;|&nbsp; ⏰ {tk['slot_time']} hrs
-                </div>
-                <div style="font-size:14px; font-weight:700; color:#166534; margin-bottom:8px;">
-                    🔢 Cupo N° {tk['slot_number']:02d} de 16 — Turno {t_nom} ({cons_nom})
-                </div>
-                <div style="font-size:13.5px; color:#1e293b; line-height:1.55;">
-                    👨‍⚕️ <strong>Médico Cirujano:</strong> {tk['doctor_name']} (CMP: <code>{tk['doctor_cmp']}</code>)<br>
-                    👤 <strong>Paciente:</strong> {tk['patient_names']} ({doc_type_lbl}: <code>{tk['patient_dni']}</code> — {tk.get('patient_age') or '-'} años)<br>
-                    🛡️ <strong>Seguro:</strong> {tk.get('insurance_type', 'SIS')} &nbsp;|&nbsp;
-                    📱 <strong>WhatsApp:</strong> {wa_info['display_phone']}<br>
-                    🩺 <strong>Motivo:</strong> {tk.get('reason') or 'Consulta de Medicina General'}
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
+        html_voucher_box = (
+            f'<div class="voucher-modal-box">'
+            f'<div style="font-size:12px; font-weight:700; color:#0369a1; text-transform:uppercase;">'
+            f'🏥 C.S. Su Santidad Juan Pablo II — Servicio de Medicina General</div>'
+            f'<div style="font-size:20px; font-weight:800; color:#0f172a; margin:4px 0;">'
+            f'📅 {tk["appointment_date"]} &nbsp;|&nbsp; ⏰ {tk["slot_time"]} hrs</div>'
+            f'<div style="font-size:14px; font-weight:700; color:#166534; margin-bottom:8px;">'
+            f'🔢 Cupo N° {tk["slot_number"]:02d} de 16 — Turno {t_nom} ({cons_nom})</div>'
+            f'<div style="font-size:13.5px; color:#1e293b; line-height:1.55;">'
+            f'👨‍⚕️ <strong>Médico Cirujano:</strong> {tk["doctor_name"]} (CMP: <code>{tk["doctor_cmp"]}</code>)<br>'
+            f'👤 <strong>Paciente:</strong> {tk["patient_names"]} ({doc_type_lbl}: <code>{tk["patient_dni"]}</code> — {tk.get("patient_age") or "-"} años)<br>'
+            f'🛡️ <strong>Seguro:</strong> {tk.get("insurance_type", "SIS")} &nbsp;|&nbsp; '
+            f'📱 <strong>WhatsApp:</strong> {wa_info["display_phone"]}<br>'
+            f'🩺 <strong>Motivo:</strong> {tk.get("reason") or "Consulta de Medicina General"}'
+            f'</div></div>'
         )
+        st.markdown(html_voucher_box, unsafe_allow_html=True)
     with col_qr:
         st.image(qr_url, caption=f"QR {tk['ticket_code']}", width=135)
 
@@ -537,19 +513,14 @@ with tab_reservar:
     if st.session_state.get("booking_error_banner"):
         err_txt = st.session_state["booking_error_banner"]
         if "Servicio de Admisión de manera presencial" in err_txt:
-            st.markdown(
-                f"""
-                <div class="presencial-alert-box">
-                    <div style="font-size:17px; font-weight:800; margin-bottom:6px;">
-                        🏥 ATENCIÓN: DEBE SOLICITAR SU CITA DE MANERA PRESENCIAL EN EL SERVICIO DE ADMISIÓN
-                    </div>
-                    <div style="font-size:14.5px; line-height:1.55;">
-                        {err_txt}
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
+            html_alert = (
+                f'<div class="presencial-alert-box">'
+                f'<div style="font-size:17px; font-weight:800; margin-bottom:6px;">'
+                f'🏥 ATENCIÓN: DEBE SOLICITAR SU CITA DE MANERA PRESENCIAL EN EL SERVICIO DE ADMISIÓN</div>'
+                f'<div style="font-size:14.5px; line-height:1.55;">{err_txt}</div>'
+                f'</div>'
             )
+            st.markdown(html_alert, unsafe_allow_html=True)
         else:
             st.error(err_txt)
 
@@ -653,48 +624,37 @@ with tab_reservar:
                 if len(m_info["all_ce_doctors"]) > 1
                 else ""
             )
-            st.markdown(
-                f"""
-                <div class="consultorio-card consultorio-morning">
-                    <div style="font-size:13px; font-weight:700; color:#0284c7; text-transform:uppercase;">
-                        🌅 Consultorio de Medicina — Turno Mañana (08:00 a 12:00 hrs)
-                    </div>
-                    <div style="font-size:17px; font-weight:800; color:#0f172a; margin-top:4px;">
-                        👨‍⚕️ {doc_m['doctor_name']}
-                    </div>
-                    <div style="font-size:13px; color:#334155; margin-top:2px;">
-                        CMP: <strong>{doc_m['doctor_cmp']}</strong> &nbsp;|&nbsp; Condición: <strong>{doc_m['condition']}</strong> &nbsp;|&nbsp;
-                        Turno en Rol: <code>{doc_m['raw_shift']} ({doc_m['raw_service']})</code>
-                        {extra_m}
-                    </div>
-                    <div style="margin-top:8px; font-size:13px; font-weight:700; color:#166534;">
-                        ✅ Cupos Disponibles: {m_info['available_slots']} de 16 (Intervalos de 15 min: 08:00 - 12:00)
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
+            html_m = (
+                f'<div class="consultorio-card consultorio-morning">'
+                f'<div style="font-size:13px; font-weight:700; color:#0284c7; text-transform:uppercase;">'
+                f'🌅 Consultorio de Medicina — Turno Mañana (08:00 a 12:00 hrs)</div>'
+                f'<div style="font-size:17px; font-weight:800; color:#0f172a; margin-top:4px;">'
+                f'👨‍⚕️ {doc_m["doctor_name"]}</div>'
+                f'<div style="font-size:13px; color:#334155; margin-top:2px;">'
+                f'CMP: <strong>{doc_m["doctor_cmp"]}</strong> &nbsp;|&nbsp; '
+                f'Condición: <strong>{doc_m["condition"]}</strong> &nbsp;|&nbsp; '
+                f'Turno en Rol: <code>{doc_m["raw_shift"]} ({doc_m["raw_service"]})</code>{extra_m}</div>'
+                f'<div style="margin-top:8px; font-size:13px; font-weight:700; color:#166534;">'
+                f'✅ Cupos Disponibles: {m_info["available_slots"]} de 16 (Intervalos de 15 min: 08:00 - 12:00)</div>'
+                f'</div>'
             )
+            st.markdown(html_m, unsafe_allow_html=True)
             st.progress(
                 m_info["occupied_slots"] / 16.0,
                 text=f"Ocupación Mañana: {m_info['occupied_slots']}/16 cupos reservados",
             )
         else:
-            st.markdown(
-                """
-                <div class="consultorio-card consultorio-disabled">
-                    <div style="font-size:13px; font-weight:700; text-transform:uppercase;">
-                        🌅 Consultorio de Medicina — Turno Mañana (08:00 a 12:00 hrs)
-                    </div>
-                    <div style="font-size:15px; font-weight:700; margin-top:6px;">
-                        ⚠️ Sin programación de Consultorio Externo (CE) en la Mañana según el rol de Turnos-IPRESS
-                    </div>
-                    <div style="font-size:12.5px; margin-top:4px;">
-                        En esta fecha los médicos del turno mañana están asignados a Tópico de Urgencias (TU) o Telesalud (TS).
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
+            html_m_dis = (
+                '<div class="consultorio-card consultorio-disabled">'
+                '<div style="font-size:13px; font-weight:700; text-transform:uppercase;">'
+                '🌅 Consultorio de Medicina — Turno Mañana (08:00 a 12:00 hrs)</div>'
+                '<div style="font-size:15px; font-weight:700; margin-top:6px;">'
+                '⚠️ Sin programación de Consultorio Externo (CE) en la Mañana según el rol de Turnos-IPRESS</div>'
+                '<div style="font-size:12.5px; margin-top:4px;">'
+                'En esta fecha los médicos del turno mañana están asignados a Tópico de Urgencias (TU) o Telesalud (TS).</div>'
+                '</div>'
             )
+            st.markdown(html_m_dis, unsafe_allow_html=True)
 
     with col_t_card:
         if t_info["is_enabled"] and t_info["titular_doctor"]:
@@ -706,48 +666,37 @@ with tab_reservar:
                 if len(t_info["all_ce_doctors"]) > 1
                 else ""
             )
-            st.markdown(
-                f"""
-                <div class="consultorio-card consultorio-afternoon">
-                    <div style="font-size:13px; font-weight:700; color:#059669; text-transform:uppercase;">
-                        🌇 Consultorio de Medicina — Turno Tarde (14:00 a 18:00 hrs)
-                    </div>
-                    <div style="font-size:17px; font-weight:800; color:#0f172a; margin-top:4px;">
-                        👩‍⚕️ {doc_t['doctor_name']}
-                    </div>
-                    <div style="font-size:13px; color:#334155; margin-top:2px;">
-                        CMP: <strong>{doc_t['doctor_cmp']}</strong> &nbsp;|&nbsp; Condición: <strong>{doc_t['condition']}</strong> &nbsp;|&nbsp;
-                        Turno en Rol: <code>{doc_t['raw_shift']} ({doc_t['raw_service']})</code>
-                        {extra_t}
-                    </div>
-                    <div style="margin-top:8px; font-size:13px; font-weight:700; color:#166534;">
-                        ✅ Cupos Disponibles: {t_info['available_slots']} de 16 (Intervalos de 15 min: 14:00 - 18:00)
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
+            html_t = (
+                f'<div class="consultorio-card consultorio-afternoon">'
+                f'<div style="font-size:13px; font-weight:700; color:#059669; text-transform:uppercase;">'
+                f'🌇 Consultorio de Medicina — Turno Tarde (14:00 a 18:00 hrs)</div>'
+                f'<div style="font-size:17px; font-weight:800; color:#0f172a; margin-top:4px;">'
+                f'👩‍⚕️ {doc_t["doctor_name"]}</div>'
+                f'<div style="font-size:13px; color:#334155; margin-top:2px;">'
+                f'CMP: <strong>{doc_t["doctor_cmp"]}</strong> &nbsp;|&nbsp; '
+                f'Condición: <strong>{doc_t["condition"]}</strong> &nbsp;|&nbsp; '
+                f'Turno en Rol: <code>{doc_t["raw_shift"]} ({doc_t["raw_service"]})</code>{extra_t}</div>'
+                f'<div style="margin-top:8px; font-size:13px; font-weight:700; color:#166534;">'
+                f'✅ Cupos Disponibles: {t_info["available_slots"]} de 16 (Intervalos de 15 min: 14:00 - 18:00)</div>'
+                f'</div>'
             )
+            st.markdown(html_t, unsafe_allow_html=True)
             st.progress(
                 t_info["occupied_slots"] / 16.0,
                 text=f"Ocupación Tarde: {t_info['occupied_slots']}/16 cupos reservados",
             )
         else:
-            st.markdown(
-                """
-                <div class="consultorio-card consultorio-disabled">
-                    <div style="font-size:13px; font-weight:700; text-transform:uppercase;">
-                        🌇 Consultorio de Medicina — Turno Tarde (14:00 a 18:00 hrs)
-                    </div>
-                    <div style="font-size:15px; font-weight:700; margin-top:6px;">
-                        ⚠️ Sin programación de Consultorio Externo (CE) en la Tarde según el rol de Turnos-IPRESS
-                    </div>
-                    <div style="font-size:12.5px; margin-top:4px;">
-                        En esta fecha no hay médico asignado al servicio CE en el Turno Tarde. Por favor elige el Turno Mañana u otra fecha.
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
+            html_t_dis = (
+                '<div class="consultorio-card consultorio-disabled">'
+                '<div style="font-size:13px; font-weight:700; text-transform:uppercase;">'
+                '🌇 Consultorio de Medicina — Turno Tarde (14:00 a 18:00 hrs)</div>'
+                '<div style="font-size:15px; font-weight:700; margin-top:6px;">'
+                '⚠️ Sin programación de Consultorio Externo (CE) en la Tarde según el rol de Turnos-IPRESS</div>'
+                '<div style="font-size:12.5px; margin-top:4px;">'
+                'En esta fecha no hay médico asignado al servicio CE en el Turno Tarde. Por favor elige el Turno Mañana u otra fecha.</div>'
+                '</div>'
             )
+            st.markdown(html_t_dis, unsafe_allow_html=True)
 
     st.markdown("---")
     st.subheader("📝 Paso 2: Elige tu Turno, Horario (cada 15 min) y Registra tus Datos")
@@ -788,16 +737,12 @@ with tab_reservar:
                 with grid_cols[idx % 4]:
                     if sl["is_available"]:
                         st.markdown(
-                            f"""<div class="slot-pill-free">
-                                Cupo #{sl['slot_number']:02d}<br>{sl['label']}<br>🟢 LIBRE
-                            </div>""",
+                            f'<div class="slot-pill-free">Cupo #{sl["slot_number"]:02d}<br>{sl["label"]}<br>🟢 LIBRE</div>',
                             unsafe_allow_html=True,
                         )
                     else:
                         st.markdown(
-                            f"""<div class="slot-pill-busy">
-                                Cupo #{sl['slot_number']:02d}<br>{sl['label']}<br>🔴 OCUPADO
-                            </div>""",
+                            f'<div class="slot-pill-busy">Cupo #{sl["slot_number"]:02d}<br>{sl["label"]}<br>🔴 OCUPADO</div>',
                             unsafe_allow_html=True,
                         )
 
