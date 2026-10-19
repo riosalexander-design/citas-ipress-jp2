@@ -944,15 +944,22 @@ with tab_reservar:
 # ===================================================================
 with tab_consultar:
     st.subheader("🔍 Consulta tu Cita, Descarga tu Ticket o Envíalo a tu WhatsApp")
-    st.markdown(
-        "Ingresa tu número de **DNI / Carné de Extranjería**, **Código de Ticket** (ej. `JP2-20261019-M01`) o **Apellidos** "
-        "para verificar tu horario, descargar tu comprobante con QR, enviarlo a tu WhatsApp o cancelar tu cita."
-    )
+    is_staff_logged = st.session_state["staff_user"] is not None
+    if is_staff_logged:
+        st.markdown(
+            "Ingresa el **DNI / Carné de Extranjería**, **Código de Ticket** (ej. `JP2-20261019-M01`) o **Apellidos** "
+            "para verificar el horario, descargar el comprobante con QR, enviarlo por WhatsApp o cancelar la cita."
+        )
+    else:
+        st.markdown(
+            "Ingresa tu número exacto de **DNI / Carné de Extranjería** o tu **Código de Ticket** (ej. `JP2-20261019-M01`) "
+            "para verificar tu horario, descargar tu comprobante con QR, enviarlo a tu WhatsApp o cancelar tu cita."
+        )
 
     c_search1, c_search2 = st.columns([3, 1])
     with c_search1:
         query_str = st.text_input(
-            "Buscar por Documento (DNI / CE), Código de Ticket o Apellidos:",
+            "Buscar por Documento (DNI / CE)" + (" o Apellidos:" if is_staff_logged else " o Código de Ticket:"),
             placeholder="Ingresa tu DNI (ej. 08451236) o Ticket (ej. JP2-20261019-M01)...",
         )
     with c_search2:
@@ -961,9 +968,9 @@ with tab_consultar:
         btn_search = st.button("🔎 Buscar Cita", use_container_width=True, type="primary")
 
     if query_str.strip():
-        results = search_appointments(query_str)
+        results = search_appointments(query_str, allow_name_like=is_staff_logged)
         if not results:
-            st.info("No se encontraron citas registradas con el dato ingresado.")
+            st.info("No se encontraron citas registradas con el número de documento o código de ticket ingresado.")
         else:
             st.markdown(f"Se encontraron **{len(results)}** cita(s) asociada(s):")
             for app_item in results:
@@ -1107,116 +1114,167 @@ with tab_rol:
 
 # ===================================================================
 # PESTAÑA 4: PANEL DE ADMISIÓN Y DESCARGA DE HOJA DE DATOS (Condición d)
+# EXCLUSIVO PARA PERSONAL DE SALUD CON CONTRASEÑA
 # ===================================================================
 with tab_admision:
-    st.subheader("🏥 Panel del Responsable de Admisión — Lista del Día y Descarga en Hoja de Datos")
-    st.markdown(
-        "Desde aquí el **Responsable de Admisión** puede visualizar y descargar en **formato de Hoja de Datos (`.xlsx` Excel y `.csv`)** "
-        "la lista completa del día con **Consultorio (Mañana / Tarde), Tipo y N° de Documento de Identidad (DNI / CE), Apellidos y Nombres, Edad, Celular (9 dígitos), Seguro, Motivo de Consulta y Médico Cirujano**."
-    )
+    st.subheader("🏥 Panel del Responsable de Admisión y Personal de Salud")
 
-    col_adm_day, col_adm_filter, col_adm_dl_xlsx, col_adm_dl_csv = st.columns([1.6, 1.2, 1.3, 1.2])
-    with col_adm_day:
-        adm_day_num = st.selectbox(
-            "📅 Seleccionar Día:",
-            [d["day"] for d in days_list],
-            index=selected_day_num - 1 if (1 <= selected_day_num <= len(days_list)) else 0,
-            format_func=lambda dnum: (
-                f"{days_list[dnum - 1]['weekday_name']} {dnum:02d}/{selected_month:02d}/{selected_year}"
-            ),
-            key="adm_day_selector",
-        )
-    with col_adm_filter:
-        only_booked_filter = st.selectbox(
-            "📋 Mostrar en Hoja de Datos:",
-            [False, True],
-            format_func=lambda b: "Todos los 32 Cupos (Mañana y Tarde)" if not b else "Solo Pacientes Citados del Día",
-        )
-    with col_adm_dl_xlsx:
-        st.write("")
-        st.write("")
-        excel_bytes = generate_daily_padron_excel(selected_year, selected_month, adm_day_num)
-        st.download_button(
-            "📊 Descargar Hoja de Datos Excel (.xlsx)",
-            data=excel_bytes,
-            file_name=f"Hoja_Datos_Admision_CS_JuanPabloII_{selected_year}_{selected_month:02d}_{adm_day_num:02d}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
-            type="primary",
-        )
-    with col_adm_dl_csv:
-        st.write("")
-        st.write("")
-        csv_bytes = generate_admission_datasheet_csv(
-            selected_year, selected_month, adm_day_num, only_booked=only_booked_filter
-        )
-        st.download_button(
-            "📄 Descargar Hoja de Datos (.csv)",
-            data=csv_bytes,
-            file_name=f"Lista_Admision_Pacientes_{selected_year}_{selected_month:02d}_{adm_day_num:02d}.csv",
-            mime="text/csv",
-            use_container_width=True,
-        )
-
-    # Mostrar la tabla unificada de Hoja de Datos de Admisión en pantalla
-    adm_records = build_admission_daily_records(
-        selected_year, selected_month, adm_day_num, only_booked=only_booked_filter
-    )
-    with st.expander("📋 Ver Lista Unificada de Admisión del Día (Día, Consultorio, Documento de Identidad y Datos del Paciente)", expanded=True):
-        if not adm_records:
-            st.info("No hay pacientes citados aún para la fecha seleccionada.")
-        else:
-            st.dataframe(pd.DataFrame(adm_records), use_container_width=True, hide_index=True, height=340)
-
-    adm_day_data = get_day_ce_consultorios(selected_year, selected_month, adm_day_num)
-
-    st.markdown("#### 🏥 Vista por Consultorio (16 Cupos Mañana y 16 Cupos Tarde)")
-    col_pad_m, col_pad_t = st.columns(2)
-
-    for col_widget, shift_key, icon_str in [
-        (col_pad_m, "morning", "🌅"),
-        (col_pad_t, "afternoon", "🌇"),
-    ]:
-        with col_widget:
-            s_data = adm_day_data[shift_key]
-            doc_t = s_data["titular_doctor"]
-            st.markdown(f"##### {icon_str} {s_data['consultorio_title']}")
-            if doc_t:
-                st.caption(
-                    f"**Médico Responsable:** {doc_t['doctor_name']} (CMP: `{doc_t['doctor_cmp']}`) | "
-                    f"**Ocupados:** `{s_data['occupied_slots']}/16` | **Libres:** `{s_data['available_slots']}/16`"
-                )
-            else:
-                st.caption("⚠️ Sin médico programado en Consultorio de Medicina (CE) para este turno.")
-
-            padron_rows = []
-            for sl in s_data["slots"]:
-                ap = sl["appointment"]
-                padron_rows.append(
-                    {
-                        "Cupo": f"#{sl['slot_number']:02d}",
-                        "Horario": sl["label"],
-                        "Estado": ap["status"].upper() if ap else "🟢 LIBRE",
-                        "Ticket": ap["ticket_code"] if ap else "-",
-                        "Tipo Doc.": (ap.get("patient_doc_type") or "DNI") if ap else "-",
-                        "N° Documento": ap["patient_dni"] if ap else "-",
-                        "Paciente": ap["patient_names"] if ap else "(Disponible)",
-                        "Edad": ap["patient_age"] if (ap and ap.get("patient_age") is not None) else "-",
-                        "Seguro": ap["insurance_type"] if ap else "-",
-                        "Celular": ap["patient_phone"] if (ap and ap.get("patient_phone")) else "-",
-                    }
-                )
-            st.dataframe(pd.DataFrame(padron_rows), use_container_width=True, hide_index=True, height=480)
-
-    st.markdown("---")
     if st.session_state["staff_user"] is None:
-        st.info(
-            "🔒 **Para registrar asistencia de pacientes ('Atendida' / 'No Asistió'), reenviar tickets por WhatsApp desde Admisión, asignar médico titular en días con doble turno CE o subir una base de datos de Turnos-IPRESS**, inicia sesión en el panel izquierdo (**Acceso Admisión / Médicos**, PIN Admin: `admin2026`)."
+        st.warning(
+            "🔒 **Acceso Restringido:** La visualización del padrón nominal de pacientes y la **descarga de citas en formato Excel (`.xlsx`) o CSV (`.csv`)** "
+            "están disponibles **únicamente para el Personal de Salud y Admisión autorizado con contraseña**."
         )
+        with st.container(border=True):
+            st.markdown("#### 🔐 Ingreso Exclusivo para Personal de Salud / Admisión")
+            st.caption(
+                "Selecciona tu perfil institucional e ingresa tu contraseña / PIN de acceso para desbloquear la descarga de Hojas de Datos (`.xlsx` / `.csv`) y el control de asistencia."
+            )
+            staff_login_options = {"ADMIN": "Jefatura / Responsable de Admisión (ADMIN)"}
+            for d in doctors_only:
+                staff_login_options[d["cmp"]] = f"{d['name']} (CMP {d['cmp']})"
+
+            col_l1, col_l2, col_l3 = st.columns([1.8, 1.4, 1.0])
+            with col_l1:
+                tab_sel_cmp = st.selectbox(
+                    "👤 Perfil de Personal de Salud:",
+                    list(staff_login_options.keys()),
+                    format_func=lambda k: staff_login_options[k],
+                    key="tab_adm_cmp_select",
+                )
+            with col_l2:
+                tab_pin_input = st.text_input(
+                    "🔑 Contraseña / PIN de Acceso:",
+                    type="password",
+                    placeholder="Ingresa tu contraseña...",
+                    key="tab_adm_pin_input",
+                )
+            with col_l3:
+                st.write("")
+                st.write("")
+                if st.button("🔓 Desbloquear Panel y Descargas", use_container_width=True, type="primary", key="tab_adm_login_btn"):
+                    with get_connection() as conn:
+                        u_row = conn.execute(
+                            "SELECT id, name, condition, cmp, pin_hash, role FROM doctors WHERE cmp = ?",
+                            (tab_sel_cmp,),
+                        ).fetchone()
+                        if u_row and u_row["pin_hash"] == hash_pin(tab_pin_input):
+                            st.session_state["staff_user"] = dict(u_row)
+                            log_audit(u_row["name"], "Inicio de Sesión Personal (Pestaña Admisión)", f"CMP {tab_sel_cmp}")
+                            st.rerun()
+                        else:
+                            st.error("❌ Contraseña / PIN incorrecto. Acceso denegado.")
     else:
         staff = st.session_state["staff_user"]
-        st.success(f"🔓 Controles Administrativos habilitados para: **{staff['name']}**")
+        c_head1, c_head2 = st.columns([3.5, 1])
+        with c_head1:
+            st.success(
+                f"🔓 **Sesión activa de Personal de Salud:** {staff['name']} (`{staff['cmp']}`) — "
+                "Opciones de descarga en Excel (`.xlsx`) y CSV (`.csv`) habilitadas."
+            )
+        with c_head2:
+            if st.button("🔒 Cerrar Sesión de Personal", use_container_width=True, key="tab_adm_logout_btn"):
+                st.session_state["staff_user"] = None
+                st.rerun()
 
+        st.markdown(
+            "Desde aquí el **Responsable de Admisión y Personal de Salud** puede visualizar y descargar en **formato de Hoja de Datos (`.xlsx` Excel y `.csv`)** "
+            "la lista completa del día con **Consultorio (Mañana / Tarde), Tipo y N° de Documento de Identidad (DNI / CE), Apellidos y Nombres, Edad, Celular (9 dígitos), Seguro, Motivo de Consulta y Médico Cirujano**."
+        )
+
+        col_adm_day, col_adm_filter, col_adm_dl_xlsx, col_adm_dl_csv = st.columns([1.6, 1.2, 1.3, 1.2])
+        with col_adm_day:
+            adm_day_num = st.selectbox(
+                "📅 Seleccionar Día:",
+                [d["day"] for d in days_list],
+                index=selected_day_num - 1 if (1 <= selected_day_num <= len(days_list)) else 0,
+                format_func=lambda dnum: (
+                    f"{days_list[dnum - 1]['weekday_name']} {dnum:02d}/{selected_month:02d}/{selected_year}"
+                ),
+                key="adm_day_selector",
+            )
+        with col_adm_filter:
+            only_booked_filter = st.selectbox(
+                "📋 Mostrar en Hoja de Datos:",
+                [False, True],
+                format_func=lambda b: "Todos los 32 Cupos (Mañana y Tarde)" if not b else "Solo Pacientes Citados del Día",
+            )
+        with col_adm_dl_xlsx:
+            st.write("")
+            st.write("")
+            excel_bytes = generate_daily_padron_excel(selected_year, selected_month, adm_day_num)
+            st.download_button(
+                "📊 Descargar Hoja de Datos Excel (.xlsx)",
+                data=excel_bytes,
+                file_name=f"Hoja_Datos_Admision_CS_JuanPabloII_{selected_year}_{selected_month:02d}_{adm_day_num:02d}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                type="primary",
+            )
+        with col_adm_dl_csv:
+            st.write("")
+            st.write("")
+            csv_bytes = generate_admission_datasheet_csv(
+                selected_year, selected_month, adm_day_num, only_booked=only_booked_filter
+            )
+            st.download_button(
+                "📄 Descargar Hoja de Datos (.csv)",
+                data=csv_bytes,
+                file_name=f"Lista_Admision_Pacientes_{selected_year}_{selected_month:02d}_{adm_day_num:02d}.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+
+        # Mostrar la tabla unificada de Hoja de Datos de Admisión en pantalla
+        adm_records = build_admission_daily_records(
+            selected_year, selected_month, adm_day_num, only_booked=only_booked_filter
+        )
+        with st.expander("📋 Ver Lista Unificada de Admisión del Día (Día, Consultorio, Documento de Identidad y Datos del Paciente)", expanded=True):
+            if not adm_records:
+                st.info("No hay pacientes citados aún para la fecha seleccionada.")
+            else:
+                st.dataframe(pd.DataFrame(adm_records), use_container_width=True, hide_index=True, height=340)
+
+        adm_day_data = get_day_ce_consultorios(selected_year, selected_month, adm_day_num)
+
+        st.markdown("#### 🏥 Vista por Consultorio (16 Cupos Mañana y 16 Cupos Tarde)")
+        col_pad_m, col_pad_t = st.columns(2)
+
+        for col_widget, shift_key, icon_str in [
+            (col_pad_m, "morning", "🌅"),
+            (col_pad_t, "afternoon", "🌇"),
+        ]:
+            with col_widget:
+                s_data = adm_day_data[shift_key]
+                doc_t = s_data["titular_doctor"]
+                st.markdown(f"##### {icon_str} {s_data['consultorio_title']}")
+                if doc_t:
+                    st.caption(
+                        f"**Médico Responsable:** {doc_t['doctor_name']} (CMP: `{doc_t['doctor_cmp']}`) | "
+                        f"**Ocupados:** `{s_data['occupied_slots']}/16` | **Libres:** `{s_data['available_slots']}/16`"
+                    )
+                else:
+                    st.caption("⚠️ Sin médico programado en Consultorio de Medicina (CE) para este turno.")
+
+                padron_rows = []
+                for sl in s_data["slots"]:
+                    ap = sl["appointment"]
+                    padron_rows.append(
+                        {
+                            "Cupo": f"#{sl['slot_number']:02d}",
+                            "Horario": sl["label"],
+                            "Estado": ap["status"].upper() if ap else "🟢 LIBRE",
+                            "Ticket": ap["ticket_code"] if ap else "-",
+                            "Tipo Doc.": (ap.get("patient_doc_type") or "DNI") if ap else "-",
+                            "N° Documento": ap["patient_dni"] if ap else "-",
+                            "Paciente": ap["patient_names"] if ap else "(Disponible)",
+                            "Edad": ap["patient_age"] if (ap and ap.get("patient_age") is not None) else "-",
+                            "Seguro": ap["insurance_type"] if ap else "-",
+                            "Celular": ap["patient_phone"] if (ap and ap.get("patient_phone")) else "-",
+                        }
+                    )
+                st.dataframe(pd.DataFrame(padron_rows), use_container_width=True, hide_index=True, height=480)
+
+        st.markdown("---")
         adm_sub1, adm_sub2, adm_sub3 = st.tabs(
             [
                 "✅ Control de Asistencia y Reenvío a WhatsApp",

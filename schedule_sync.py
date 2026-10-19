@@ -963,21 +963,32 @@ def update_appointment_status(appointment_id: int, new_status: str, updated_by: 
         return True, f"Estado de la cita {row['ticket_code']} actualizado a '{new_status.upper()}'."
 
 
-def search_appointments(query_dni_or_ticket: str) -> list[dict]:
-    """Busca citas por DNI del paciente o por Código de Ticket."""
+def search_appointments(query_dni_or_ticket: str, allow_name_like: bool = True) -> list[dict]:
+    """Busca citas por DNI/CE exacto o Código de Ticket exacto (y por nombre parcial si es personal autorizado)."""
     q = query_dni_or_ticket.strip().upper()
     if not q:
         return []
     with get_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT *
-            FROM appointments
-            WHERE UPPER(patient_dni) = ? OR UPPER(ticket_code) = ? OR UPPER(patient_names) LIKE ?
-            ORDER BY appointment_date DESC, shift_period ASC, slot_number ASC
-            """,
-            (q, q, f"%{q}%"),
-        ).fetchall()
+        if allow_name_like:
+            rows = conn.execute(
+                """
+                SELECT *
+                FROM appointments
+                WHERE UPPER(patient_dni) = ? OR UPPER(ticket_code) = ? OR UPPER(patient_names) LIKE ?
+                ORDER BY appointment_date DESC, shift_period ASC, slot_number ASC
+                """,
+                (q, q, f"%{q}%"),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT *
+                FROM appointments
+                WHERE UPPER(patient_dni) = ? OR UPPER(ticket_code) = ?
+                ORDER BY appointment_date DESC, shift_period ASC, slot_number ASC
+                """,
+                (q, q),
+            ).fetchall()
         return [dict(r) for r in rows]
 
 
