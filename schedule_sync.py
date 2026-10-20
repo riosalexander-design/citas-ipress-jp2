@@ -6,6 +6,7 @@ para el Consultorio Externo de Medicina (CE) del C.S. Su Santidad Juan Pablo II.
 """
 
 import os
+import json
 import sqlite3
 import unicodedata
 from datetime import datetime, date, timedelta, timezone
@@ -74,13 +75,71 @@ def get_slots_definition(shift_period: str) -> list[dict]:
     return MORNING_SLOTS if shift_period == "M" else AFTERNOON_SLOTS
 
 
+SEED_JSON_PATH = os.path.join(os.path.dirname(__file__), "turnos_ipress_seed.json")
+
+
 def sync_from_external_turnos_db(source_db_path: str = None) -> dict:
     """
-    Sincroniza los médicos y los turnos desde la base de datos de turnos-ipress (ipress_turnos.db).
-    Retorna un diccionario con el resultado de la sincronización.
+    Sincroniza los médicos y los turnos desde la base de datos de turnos-ipress (ipress_turnos.db)
+    o desde el archivo semilla JSON (turnos_ipress_seed.json) en la nube (Streamlit Cloud).
     """
     ext_path = source_db_path or find_external_turnos_db()
-    if not ext_path or not os.path.exists(ext_path):
+
+    ext_docs = []
+    ext_shifts = []
+    ext_id_to_cmp = {}
+    source_label = ""
+
+    if ext_path and os.path.exists(ext_path):
+        try:
+            ext_conn = sqlite3.connect(ext_path, timeout=15.0)
+            ext_conn.row_factory = sqlite3.Row
+            ext_docs = [
+                dict(r)
+                for r in ext_conn.execute(
+                    "SELECT id, name, condition, cmp, pin_hash, role, is_active FROM doctors"
+                ).fetchall()
+            ]
+            ext_shifts = [
+                dict(r)
+                for r in ext_conn.execute(
+                    "SELECT year, month, day, shift_period, service, doctor_id, is_proposal FROM shifts"
+                ).fetchall()
+            ]
+            ext_id_to_cmp = {d["id"]: d["cmp"] for d in ext_docs}
+            ext_conn.close()
+            source_label = ext_path
+
+            # Guardar semilla JSON actualizada para despliegues en Streamlit Cloud
+            if source_db_path is None:
+                try:
+                    with open(SEED_JSON_PATH, "w", encoding="utf-8") as jf:
+                        json.dump({"doctors": ext_docs, "shifts": ext_shifts}, jf, ensure_ascii=False, indent=2)
+                except OSError:
+                    pass
+        except Exception as exc:
+            return {
+                "synced": False,
+                "source": ext_path,
+                "shifts_synced": 0,
+                "message": f"Aviso al sincronizar con BD externa: {exc}",
+            }
+    elif os.path.exists(SEED_JSON_PATH):
+        try:
+            with open(SEED_JSON_PATH, "r", encoding="utf-8") as jf:
+                seed_data = json.load(jf)
+            ext_docs = seed_data.get("doctors", [])
+            ext_shifts = seed_data.get("shifts", [])
+            ext_id_to_cmp = {d["id"]: d["cmp"] for d in ext_docs}
+            source_label = SEED_JSON_PATH
+        except Exception as exc:
+            return {
+                "synced": False,
+                "source": SEED_JSON_PATH,
+                "shifts_synced": 0,
+                "message": f"Aviso al cargar semilla JSON: {exc}",
+            }
+    else:
         return {
             "synced": False,
             "source": "Motor Interno Turnos-IPRESS (Standalone Cloud)",
@@ -89,19 +148,6 @@ def sync_from_external_turnos_db(source_db_path: str = None) -> dict:
         }
 
     try:
-        ext_conn = sqlite3.connect(ext_path, timeout=15.0)
-        ext_conn.row_factory = sqlite3.Row
-
-        ext_docs = ext_conn.execute(
-            "SELECT id, name, condition, cmp, pin_hash, role, is_active FROM doctors"
-        ).fetchall()
-        ext_shifts = ext_conn.execute(
-            "SELECT year, month, day, shift_period, service, doctor_id, is_proposal FROM shifts"
-        ).fetchall()
-
-        ext_id_to_cmp = {d["id"]: d["cmp"] for d in ext_docs}
-        ext_conn.close()
-
         with get_connection() as conn:
             # 1. Sincronizar médicos por CMP
             for d in ext_docs:
@@ -161,22 +207,22 @@ def sync_from_external_turnos_db(source_db_path: str = None) -> dict:
                 INSERT OR REPLACE INTO sync_metadata (key, value, updated_at)
                 VALUES ('last_sync', ?, CURRENT_TIMESTAMP)
                 """,
-                (f"Sincronizado con {os.path.basename(ext_path)} ({synced_count} turnos) el {now_str}",),
+                (f"Sincronizado con {os.path.basename(source_label)} ({synced_count} turnos) el {now_str}",),
             )
             conn.commit()
 
         return {
             "synced": True,
-            "source": ext_path,
+            "source": source_label,
             "shifts_synced": synced_count,
             "message": f"Sincronizado exitosamente con turnos-ipress ({synced_count} registros de turnos).",
         }
     except Exception as exc:
         return {
             "synced": False,
-            "source": ext_path,
+            "source": source_label,
             "shifts_synced": 0,
-            "message": f"Aviso al sincronizar con BD externa: {exc}",
+            "message": f"Aviso al sincronizar: {exc}",
         }
 
 

@@ -1,0 +1,2184 @@
+{
+  "doctors": [
+    {
+      "id": 1,
+      "name": "Caldas Pacsi, Lily Katherine",
+      "condition": "CAS",
+      "cmp": "71201",
+      "pin_hash": "ecdf40652aebdf50b736bd5f8e8c4c7b905583c9fae09404af66bf87da0237c4",
+      "role": "doctor",
+      "is_active": 1
+    },
+    {
+      "id": 2,
+      "name": "Chunga Torres, Tuly Magnolia",
+      "condition": "CAS",
+      "cmp": "68432",
+      "pin_hash": "5a4b2cdca6b0563f5ffd50bcee78bd2a12e0547d9eeef0a1ea8d6ba6f7ce5094",
+      "role": "doctor",
+      "is_active": 1
+    },
+    {
+      "id": 3,
+      "name": "Laureano Varillas, Elizabeth Miriam",
+      "condition": "CAS",
+      "cmp": "75319",
+      "pin_hash": "240e8f428109187aea4d198ac27057647a0c83afc2497a35125fb6a7d758133f",
+      "role": "doctor",
+      "is_active": 1
+    },
+    {
+      "id": 4,
+      "name": "Sanchez Quintanilla, Cinthya",
+      "condition": "CAS",
+      "cmp": "80145",
+      "pin_hash": "38b3642ecec1db9936dbcfde078967b4cb41bdaf5188a745fc7c523b619acb49",
+      "role": "doctor",
+      "is_active": 1
+    },
+    {
+      "id": 5,
+      "name": "Solano Ricaldi, Edward Jhonny",
+      "condition": "Nombrado",
+      "cmp": "54982",
+      "pin_hash": "ade25c4b4274ba147ea79b17d8cea5240062968dd25483fc9b76b679eda7a72c",
+      "role": "doctor",
+      "is_active": 1
+    },
+    {
+      "id": 6,
+      "name": "Jefatura Médica IPRESS",
+      "condition": "Nombrado",
+      "cmp": "ADMIN",
+      "pin_hash": "6051fc84a7a0d74c225fb18a496b09952da5642e60723ecae543298edd7d82d6",
+      "role": "admin",
+      "is_active": 1
+    }
+  ],
+  "shifts": [
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 1,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 1,
+      "shift_period": "T",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 1,
+      "shift_period": "M",
+      "service": "TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 2,
+      "shift_period": "12h",
+      "service": "TS+TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 2,
+      "shift_period": "12h",
+      "service": "TU+CE",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 2,
+      "shift_period": "12h",
+      "service": "CE+TU",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 2,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 2,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 3,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 3,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 3,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 3,
+      "shift_period": "12h",
+      "service": "TS+TU",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 3,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 5,
+      "shift_period": "12h",
+      "service": "TU+CE",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 5,
+      "shift_period": "12h",
+      "service": "CE+TU",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 5,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 5,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 5,
+      "shift_period": "T",
+      "service": "TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 6,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 6,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 6,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 6,
+      "shift_period": "T",
+      "service": "TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 7,
+      "shift_period": "12h",
+      "service": "TS+TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 7,
+      "shift_period": "12h",
+      "service": "TU+CE",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 7,
+      "shift_period": "12h",
+      "service": "CE+CE",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 7,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 7,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 8,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 8,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 8,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 9,
+      "shift_period": "12h",
+      "service": "TU+CE",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 9,
+      "shift_period": "12h",
+      "service": "CE+TU",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 9,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 9,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 9,
+      "shift_period": "T",
+      "service": "TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 10,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 10,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 10,
+      "shift_period": "12h",
+      "service": "TS+TU",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 10,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 10,
+      "shift_period": "T",
+      "service": "CE",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 12,
+      "shift_period": "12h",
+      "service": "TU+CE",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 12,
+      "shift_period": "12h",
+      "service": "CE+TU",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 12,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 12,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 12,
+      "shift_period": "T",
+      "service": "TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 13,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 13,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 13,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 13,
+      "shift_period": "T",
+      "service": "TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 14,
+      "shift_period": "12h",
+      "service": "TS+TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 14,
+      "shift_period": "12h",
+      "service": "TU+CE",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 14,
+      "shift_period": "12h",
+      "service": "CE+CE",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 14,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 14,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 15,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 15,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 15,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 15,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 15,
+      "shift_period": "T",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 16,
+      "shift_period": "12h",
+      "service": "TU+CE",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 16,
+      "shift_period": "12h",
+      "service": "CE+TU",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 16,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 16,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 16,
+      "shift_period": "T",
+      "service": "TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 17,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 17,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 17,
+      "shift_period": "12h",
+      "service": "TS+TU",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 17,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 17,
+      "shift_period": "T",
+      "service": "CE",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 19,
+      "shift_period": "12h",
+      "service": "TU+CE",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 19,
+      "shift_period": "12h",
+      "service": "CE+TU",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 19,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 19,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 19,
+      "shift_period": "T",
+      "service": "TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 20,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 20,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 20,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 20,
+      "shift_period": "T",
+      "service": "TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 21,
+      "shift_period": "12h",
+      "service": "TS+TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 21,
+      "shift_period": "12h",
+      "service": "TU+CE",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 21,
+      "shift_period": "12h",
+      "service": "CE+CE",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 21,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 21,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 22,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 22,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 22,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 22,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 22,
+      "shift_period": "T",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 23,
+      "shift_period": "12h",
+      "service": "TU+CE",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 23,
+      "shift_period": "12h",
+      "service": "CE+TU",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 23,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 23,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 24,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 24,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 24,
+      "shift_period": "12h",
+      "service": "TS+TU",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 24,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 26,
+      "shift_period": "12h",
+      "service": "TU+CE",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 26,
+      "shift_period": "12h",
+      "service": "CE+TU",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 26,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 26,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 27,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 27,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 27,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 27,
+      "shift_period": "T",
+      "service": "TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 28,
+      "shift_period": "12h",
+      "service": "TS+TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 28,
+      "shift_period": "12h",
+      "service": "TU+CE",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 28,
+      "shift_period": "12h",
+      "service": "CE+CE",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 28,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 29,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 29,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 29,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 29,
+      "shift_period": "T",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 30,
+      "shift_period": "M",
+      "service": "TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 31,
+      "shift_period": "12h",
+      "service": "TS+TU",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 10,
+      "day": 31,
+      "shift_period": "M",
+      "service": "TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 2,
+      "shift_period": "12h",
+      "service": "TS+TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 2,
+      "shift_period": "12h",
+      "service": "TU+CE",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 2,
+      "shift_period": "12h",
+      "service": "CE+TU",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 2,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 2,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 3,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 3,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 3,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 3,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 4,
+      "shift_period": "12h",
+      "service": "TS+TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 4,
+      "shift_period": "12h",
+      "service": "TU+CE",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 4,
+      "shift_period": "12h",
+      "service": "CE+CE",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 4,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 4,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 5,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 5,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 5,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 5,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 5,
+      "shift_period": "T",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 6,
+      "shift_period": "12h",
+      "service": "TU+CE",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 6,
+      "shift_period": "12h",
+      "service": "CE+TU",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 6,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 6,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 6,
+      "shift_period": "T",
+      "service": "TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 7,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 7,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 7,
+      "shift_period": "12h",
+      "service": "TS+TU",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 7,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 7,
+      "shift_period": "T",
+      "service": "CE",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 9,
+      "shift_period": "12h",
+      "service": "TU+CE",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 9,
+      "shift_period": "12h",
+      "service": "CE+TU",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 9,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 9,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 9,
+      "shift_period": "T",
+      "service": "TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 10,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 10,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 10,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 10,
+      "shift_period": "T",
+      "service": "TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 11,
+      "shift_period": "12h",
+      "service": "TS+TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 11,
+      "shift_period": "12h",
+      "service": "TU+CE",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 11,
+      "shift_period": "12h",
+      "service": "CE+CE",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 11,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 11,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 12,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 12,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 12,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 12,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 12,
+      "shift_period": "T",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 13,
+      "shift_period": "12h",
+      "service": "TU+CE",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 13,
+      "shift_period": "12h",
+      "service": "CE+TU",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 13,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 13,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 13,
+      "shift_period": "T",
+      "service": "TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 14,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 14,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 14,
+      "shift_period": "12h",
+      "service": "TS+TU",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 14,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 14,
+      "shift_period": "T",
+      "service": "CE",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 16,
+      "shift_period": "12h",
+      "service": "TU+CE",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 16,
+      "shift_period": "12h",
+      "service": "CE+TU",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 16,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 16,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 16,
+      "shift_period": "T",
+      "service": "TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 17,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 17,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 17,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 17,
+      "shift_period": "T",
+      "service": "TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 18,
+      "shift_period": "12h",
+      "service": "TS+TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 18,
+      "shift_period": "12h",
+      "service": "TU+CE",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 18,
+      "shift_period": "12h",
+      "service": "CE+CE",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 18,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 18,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 19,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 19,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 19,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 19,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 19,
+      "shift_period": "T",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 20,
+      "shift_period": "12h",
+      "service": "TU+CE",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 20,
+      "shift_period": "12h",
+      "service": "CE+TU",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 20,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 20,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 20,
+      "shift_period": "T",
+      "service": "TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 21,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 21,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 21,
+      "shift_period": "12h",
+      "service": "TS+TU",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 21,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 21,
+      "shift_period": "T",
+      "service": "CE",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 23,
+      "shift_period": "12h",
+      "service": "TU+CE",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 23,
+      "shift_period": "12h",
+      "service": "CE+TU",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 23,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 23,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 23,
+      "shift_period": "T",
+      "service": "TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 24,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 24,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 24,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 24,
+      "shift_period": "T",
+      "service": "TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 25,
+      "shift_period": "12h",
+      "service": "TS+TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 25,
+      "shift_period": "12h",
+      "service": "TU+CE",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 25,
+      "shift_period": "12h",
+      "service": "CE+CE",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 25,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 25,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 26,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 26,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 26,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 26,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 26,
+      "shift_period": "T",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 27,
+      "shift_period": "12h",
+      "service": "TU+CE",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 27,
+      "shift_period": "12h",
+      "service": "CE+TU",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 27,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 27,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 27,
+      "shift_period": "T",
+      "service": "TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 28,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 28,
+      "shift_period": "DES",
+      "service": "DES",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 28,
+      "shift_period": "12h",
+      "service": "TS+TU",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 28,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 28,
+      "shift_period": "T",
+      "service": "CE",
+      "doctor_id": 5,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 30,
+      "shift_period": "M",
+      "service": "TU",
+      "doctor_id": 4,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 30,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 2,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 30,
+      "shift_period": "M",
+      "service": "TS",
+      "doctor_id": 1,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 30,
+      "shift_period": "M",
+      "service": "CE",
+      "doctor_id": 3,
+      "is_proposal": 0
+    },
+    {
+      "year": 2026,
+      "month": 11,
+      "day": 30,
+      "shift_period": "T",
+      "service": "TU",
+      "doctor_id": 5,
+      "is_proposal": 0
+    }
+  ]
+}

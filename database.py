@@ -10,7 +10,7 @@ import hashlib
 import os
 from datetime import datetime
 
-DB_FILE = os.path.join(os.path.dirname(__file__), "citas_jp2.db")
+DB_FILE = os.path.join(os.path.dirname(__file__), "citas_jp2_v2.db")
 
 # Ruta local de la base de datos de turnos-ipress (cuando se ejecuta en el mismo equipo)
 EXTERNAL_TURNOS_DB_CANDIDATES = [
@@ -24,14 +24,39 @@ def hash_pin(pin: str) -> str:
     return hashlib.sha256(pin.encode("utf-8")).hexdigest()
 
 
+def _remove_corrupted_db(target: str):
+    """Elimina archivos SQLite corruptos para permitir su recreación limpia."""
+    for suffix in ("", "-wal", "-shm", "-journal"):
+        p = target + suffix
+        if os.path.exists(p):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+
+
 def get_connection(db_path: str = None):
-    """Retorna una conexión SQLite con WAL mode y timeout para alta concurrencia."""
+    """Retorna una conexión SQLite segura con auto-recuperación ante archivos corruptos."""
     target = db_path or DB_FILE
-    conn = sqlite3.connect(target, timeout=30.0)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA journal_mode = WAL")
-    return conn
+    try:
+        conn = sqlite3.connect(target, timeout=30.0)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA journal_mode = DELETE")
+        # Verificar que el archivo sea una base de datos SQLite válida
+        conn.execute("SELECT name FROM sqlite_master LIMIT 1").fetchall()
+        return conn
+    except sqlite3.DatabaseError:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        _remove_corrupted_db(target)
+        conn = sqlite3.connect(target, timeout=30.0)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA journal_mode = DELETE")
+        return conn
 
 
 def find_external_turnos_db() -> str | None:
@@ -44,7 +69,13 @@ def find_external_turnos_db() -> str | None:
 
 def init_db():
     """Inicializa las tablas de médicos, turnos sincronizados, citas médicas y auditoría."""
-    with get_connection() as conn:
+    try:
+        conn = get_connection()
+    except sqlite3.DatabaseError:
+        _remove_corrupted_db(DB_FILE)
+        conn = get_connection()
+
+    with conn:
         cursor = conn.cursor()
 
         # 1. Tabla de Médicos Cirujanos (idéntica a turnos-ipress)
@@ -159,7 +190,7 @@ def init_db():
 
         conn.commit()
 
-        # Precargar la nómina oficial de los 5 médicos del C.S. Su Santidad Juan Pablo II y Jefatura
+        # Precargar la nómina oficial de médicos del C.S. Su Santidad Juan Pablo II y Jefatura
         initial_doctors = [
             ("Caldas Pacsi, Lily Katherine", "CAS", "71201", "4182", "doctor"),
             ("Chunga Torres, Tuly Magnolia", "CAS", "68432", "6935", "doctor"),
@@ -191,6 +222,7 @@ def init_db():
                 )
 
         conn.commit()
+    conn.close()
 
 
 def log_audit(user_name: str, action: str, details: str = "", conn=None):
