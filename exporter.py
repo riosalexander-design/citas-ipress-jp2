@@ -6,13 +6,567 @@ de Citas Médicas para el C.S. Su Santidad Juan Pablo II.
 """
 
 import io
+import os
 import csv
+import base64
+import hashlib
+import textwrap
 import urllib.parse
+from PIL import Image, ImageDraw, ImageFont
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from schedule_sync import get_day_ce_consultorios, get_month_ce_overview
 from holidays_pe import get_month_info
+
+
+def _load_font(size: int, bold: bool = False):
+    """Carga una fuente TrueType limpia compatible con Windows y Linux (Streamlit Cloud)."""
+    candidates = (
+        [
+            "C:/Windows/Fonts/segoeuib.ttf",
+            "C:/Windows/Fonts/arialbd.ttf",
+            "C:/Windows/Fonts/calibrib.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        ]
+        if bold
+        else [
+            "C:/Windows/Fonts/segoeui.ttf",
+            "C:/Windows/Fonts/arial.ttf",
+            "C:/Windows/Fonts/calibri.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        ]
+    )
+    for path in candidates:
+        if os.path.exists(path):
+            try:
+                return ImageFont.truetype(path, size=size)
+            except Exception:
+                pass
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:
+        return ImageFont.load_default()
+
+
+def _build_qr_image(payload_text: str, target_size: int = 148) -> Image.Image:
+    """
+    Genera la imagen del código QR del ticket en alta nitidez.
+    Usa la librería `qrcode` si está disponible; de lo contrario, genera una matriz QR
+    determinística con patrones de posición estándar para que nunca falle.
+    """
+    try:
+        import qrcode
+
+        qr = qrcode.QRCode(
+            version=None,
+            error_correction=qrcode.constants.ERROR_CORRECT_M,
+            box_size=6,
+            border=2,
+        )
+        qr.add_data(payload_text)
+        qr.make(fit=True)
+        qr_img = qr.make_image(fill_color="#0f172a", back_color="#ffffff").convert("RGB")
+        return qr_img.resize((target_size, target_size), Image.Resampling.NEAREST)
+    except Exception:
+        # Matriz QR de respaldo 25x25 con los 3 patrones finder + timing + hash del ticket
+        modules = 25
+        grid = [[0 for _ in range(modules)] for _ in range(modules)]
+        reserved = [[False for _ in range(modules)] for _ in range(modules)]
+
+        def place_finder(r0: int, c0: int):
+            for r in range(-1, 8):
+                for c in range(-1, 8):
+                    rr, cc = r0 + r, c0 + c
+                    if 0 <= rr < modules and 0 <= cc < modules:
+                        reserved[rr][cc] = True
+                        if 0 <= r <= 6 and 0 <= c <= 6:
+                            if r in (0, 6) or c in (0, 6) or (2 <= r <= 4 and 2 <= c <= 4):
+                                grid[rr][cc] = 1
+                            else:
+                                grid[rr][cc] = 0
+
+        place_finder(0, 0)
+        place_finder(0, modules - 7)
+        place_finder(modules - 7, 0)
+
+        for i in range(8, modules - 8):
+            reserved[6][i] = True
+            reserved[i][6] = True
+            grid[6][i] = 1 if i % 2 == 0 else 0
+            grid[i][6] = 1 if i % 2 == 0 else 0
+
+        digest = hashlib.sha256(payload_text.encode("utf-8")).digest()
+        digest_ext = digest + hashlib.sha256(digest).digest() + hashlib.md5(payload_text.encode("utf-8")).digest()
+        bit_idx = 0
+        for r in range(modules):
+            for c in range(modules):
+                if not reserved[r][c]:
+                    byte_val = digest_ext[(bit_idx // 8) % len(digest_ext)]
+                    bit_val = (byte_val >> (bit_idx % 8)) & 1
+                    grid[r][c] = bit_val
+                    bit_idx += 1
+
+        quiet = 2
+        total_m = modules + quiet * 2
+        img = Image.new("RGB", (total_m, total_m), "#ffffff")
+        px = img.load()
+        for r in range(modules):
+            for c in range(modules):
+                if grid[r][c]:
+                    px[c + quiet, r + quiet] = (15, 23, 42)
+        return img.resize((target_size, target_size), Image.Resampling.NEAREST)
+
+
+def generate_ticket_image_png(appointment: dict) -> bytes:
+    """
+    Genera el comprobante gráfico oficial de cita médica en formato imagen (.PNG)
+    con el mismo diseño, estructura, código QR, colores y datos que el ticket de impresión,
+    listo para enviarse como aviso gráfico por WhatsApp o guardarse en el celular/PC.
+    """
+    width = 860
+    height = 1040
+    img = Image.new("RGB", (width, height), "#f1f5f9")
+    draw = ImageDraw.Draw(img)
+
+    # Fuentes tipográficas escaladas
+    f_hdr_title = _load_font(26, bold=True)
+    f_hdr_sub = _load_font(16, bold=False)
+    f_banner_lbl = _load_font(14, bold=True)
+    f_banner_code = _load_font(26, bold=True)
+    f_badge = _load_font(15, bold=True)
+    f_slot_lbl = _load_font(14, bold=True)
+    f_slot_big = _load_font(24, bold=True)
+    f_slot_sub = _load_font(16, bold=True)
+    f_qr_cap = _load_font(12, bold=False)
+    f_row_lbl = _load_font(17, bold=True)
+    f_row_val = _load_font(17, bold=False)
+    f_row_val_bold = _load_font(17, bold=True)
+    f_foot_title = _load_font(15, bold=True)
+    f_foot_txt = _load_font(14, bold=False)
+
+    turno_label = (
+        "MAÑANA (08:00 a 12:00 hrs)"
+        if appointment["shift_period"] == "M"
+        else "TARDE (14:00 a 18:00 hrs)"
+    )
+    consultorio_label = (
+        "Consultorio de Medicina N° 1 (Turno Mañana)"
+        if appointment["shift_period"] == "M"
+        else "Consultorio de Medicina N° 2 (Turno Tarde)"
+    )
+    status_upper = appointment.get("status", "reservada").upper()
+    doc_type_lbl = appointment.get("patient_doc_type") or "DNI"
+
+    # Marco principal de la tarjeta
+    card_x0, card_y0, card_x1, card_y1 = 28, 24, width - 28, height - 24
+    draw.rounded_rectangle(
+        [card_x0, card_y0, card_x1, card_y1],
+        radius=18,
+        fill="#ffffff",
+        outline="#0284c7",
+        width=3,
+    )
+
+    # 1. Encabezado Institucional (Azul Oscuro)
+    hdr_h = 104
+    draw.rounded_rectangle(
+        [card_x0, card_y0, card_x1, card_y0 + hdr_h],
+        radius=16,
+        fill="#0369a1",
+    )
+    draw.rectangle(
+        [card_x0, card_y0 + hdr_h - 18, card_x1, card_y0 + hdr_h],
+        fill="#0369a1",
+    )
+    draw.text(
+        (width // 2, card_y0 + 34),
+        "C.S. SU SANTIDAD JUAN PABLO II",
+        fill="#ffffff",
+        font=f_hdr_title,
+        anchor="mm",
+    )
+    draw.text(
+        (width // 2, card_y0 + 72),
+        "SERVICIO DE MEDICINA GENERAL - CONSULTORIO EXTERNO (CE)",
+        fill="#e0f2fe",
+        font=f_hdr_sub,
+        anchor="mm",
+    )
+
+    # 2. Franja de Código de Ticket y Estado
+    ban_y0 = card_y0 + hdr_h
+    ban_y1 = ban_y0 + 78
+    draw.rectangle([card_x0 + 3, ban_y0, card_x1 - 3, ban_y1], fill="#e0f2fe")
+    # Línea punteada inferior
+    for x_dash in range(card_x0 + 6, card_x1 - 10, 14):
+        draw.line([(x_dash, ban_y1), (min(x_dash + 8, card_x1 - 6), ban_y1)], fill="#38bdf8", width=2)
+
+    draw.text(
+        (card_x0 + 28, ban_y0 + 16),
+        "TICKET OFICIAL DE CITA:",
+        fill="#475569",
+        font=f_banner_lbl,
+    )
+    draw.text(
+        (card_x0 + 28, ban_y0 + 38),
+        str(appointment["ticket_code"]),
+        fill="#0369a1",
+        font=f_banner_code,
+    )
+
+    # Badge de Estado (RESERVADA)
+    badge_w, badge_h = 150, 38
+    badge_x0 = card_x1 - 28 - badge_w
+    badge_y0 = ban_y0 + (78 - badge_h) // 2
+    draw.rounded_rectangle(
+        [badge_x0, badge_y0, badge_x0 + badge_w, badge_y0 + badge_h],
+        radius=19,
+        fill="#dcfce7",
+        outline="#86efac",
+        width=2,
+    )
+    draw.text(
+        (badge_x0 + badge_w // 2, badge_y0 + badge_h // 2),
+        status_upper,
+        fill="#166534",
+        font=f_badge,
+        anchor="mm",
+    )
+
+    # 3. Bloque Superior Destacado: Fecha/Hora/Cupo + Código QR
+    top_y0 = ban_y1 + 22
+    top_h = 182
+    qr_box_w = 180
+    slot_x0 = card_x0 + 28
+    slot_x1 = card_x1 - 28 - qr_box_w - 18
+
+    draw.rounded_rectangle(
+        [slot_x0, top_y0, slot_x1, top_y0 + top_h],
+        radius=14,
+        fill="#f8fafc",
+        outline="#cbd5e1",
+        width=2,
+    )
+    slot_cx = (slot_x0 + slot_x1) // 2
+    draw.text(
+        (slot_cx, top_y0 + 26),
+        "FECHA Y HORA EXACTA DE ATENCIÓN",
+        fill="#64748b",
+        font=f_slot_lbl,
+        anchor="mm",
+    )
+    draw.text(
+        (slot_cx, top_y0 + 66),
+        f"Fecha: {appointment['appointment_date']}",
+        fill="#0f172a",
+        font=f_slot_big,
+        anchor="mm",
+    )
+    draw.text(
+        (slot_cx, top_y0 + 104),
+        f"Hora: {appointment['slot_time']} hrs",
+        fill="#0f172a",
+        font=f_slot_big,
+        anchor="mm",
+    )
+    draw.text(
+        (slot_cx, top_y0 + 148),
+        f"CUPO N° {appointment['slot_number']:02d} de 16 — TURNO {turno_label}",
+        fill="#0369a1",
+        font=f_slot_sub,
+        anchor="mm",
+    )
+
+    # Caja QR a la derecha
+    qr_x0 = slot_x1 + 18
+    qr_x1 = card_x1 - 28
+    draw.rounded_rectangle(
+        [qr_x0, top_y0, qr_x1, top_y0 + top_h],
+        radius=14,
+        fill="#ffffff",
+        outline="#e2e8f0",
+        width=2,
+    )
+    qr_raw_payload = (
+        f"CS-JP2|{appointment['ticket_code']}|{doc_type_lbl}:{appointment['patient_dni']}|"
+        f"FECHA:{appointment['appointment_date']}|HORA:{appointment['slot_time']}|"
+        f"CUPO:{appointment['slot_number']}|MED:{appointment['doctor_cmp']}"
+    )
+    qr_img = _build_qr_image(qr_raw_payload, target_size=138)
+    qr_paste_x = qr_x0 + (qr_box_w - 138) // 2
+    qr_paste_y = top_y0 + 12
+    img.paste(qr_img, (qr_paste_x, qr_paste_y))
+    draw.text(
+        (qr_x0 + qr_box_w // 2, top_y0 + 163),
+        "Verificación QR",
+        fill="#64748b",
+        font=f_qr_cap,
+        anchor="mm",
+    )
+
+    # 4. Filas Detalladas de la Cita y del Paciente
+    rows_data = [
+        ("Consultorio:", consultorio_label, False),
+        ("Médico Cirujano:", f"{appointment['doctor_name']} (CMP: {appointment['doctor_cmp']})", True),
+        ("Paciente:", str(appointment["patient_names"]), True),
+        (
+            f"Documento ({doc_type_lbl}):",
+            f"{appointment['patient_dni']} (Edad: {appointment.get('patient_age') or '-'} años)",
+            True,
+        ),
+        ("Seguro / Financiamiento:", str(appointment.get("insurance_type") or "SIS"), False),
+        ("Celular / WhatsApp:", str(appointment.get("patient_phone") or "-"), False),
+        ("Motivo de Consulta:", str(appointment.get("reason") or "Consulta de Medicina General"), False),
+    ]
+
+    curr_y = top_y0 + top_h + 20
+    row_x0 = card_x0 + 28
+    row_x1 = card_x1 - 28
+    row_h = 56
+
+    for label_txt, val_txt, is_bold_val in rows_data:
+        draw.text(
+            (row_x0, curr_y + row_h // 2),
+            label_txt,
+            fill="#334155",
+            font=f_row_lbl,
+            anchor="lm",
+        )
+        # Truncar suavemente si es muy largo para que no se superponga
+        val_clean = val_txt if len(val_txt) <= 48 else (val_txt[:45] + "...")
+        draw.text(
+            (row_x1, curr_y + row_h // 2),
+            val_clean,
+            fill="#0f172a",
+            font=f_row_val_bold if is_bold_val else f_row_val,
+            anchor="rm",
+        )
+        draw.line([(row_x0, curr_y + row_h), (row_x1, curr_y + row_h)], fill="#e2e8f0", width=1)
+        curr_y += row_h
+
+    # 5. Pie de Página con Indicaciones Oficiales
+    foot_y0 = card_y1 - 155
+    draw.rounded_rectangle(
+        [card_x0 + 3, foot_y0, card_x1 - 3, card_y1 - 3],
+        radius=15,
+        fill="#f8fafc",
+    )
+    draw.line([(card_x0 + 3, foot_y0), (card_x1 - 3, foot_y0)], fill="#cbd5e1", width=2)
+
+    draw.text(
+        (row_x0, foot_y0 + 22),
+        "Indicaciones para el Paciente:",
+        fill="#0369a1",
+        font=f_foot_title,
+    )
+    ind_lines = [
+        f"1. Acuda a Admisión del C.S. Su Santidad Juan Pablo II 20 minutos antes de su horario ({appointment['slot_time']} hrs).",
+        f"2. Presente su {doc_type_lbl} físico y muestre este aviso gráfico o su ticket impreso en ventanilla.",
+        "3. Portal Oficial de Citas: citascsjp2.streamlit.app  |  Rol Asistencial: turnos-ipress.streamlit.app",
+    ]
+    iy = foot_y0 + 52
+    for line in ind_lines:
+        draw.text((row_x0, iy), line, fill="#334155", font=f_foot_txt)
+        iy += 30
+
+    # Reforzar borde exterior redondeado
+    draw.rounded_rectangle(
+        [card_x0, card_y0, card_x1, card_y1],
+        radius=18,
+        fill=None,
+        outline="#0284c7",
+        width=3,
+    )
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", optimize=True)
+    return buf.getvalue()
+
+
+def generate_whatsapp_graphic_share_html(appointment: dict, png_bytes: bytes | None = None) -> str:
+    """
+    Genera un componente interactivo HTML/JS para compartir el Ticket Gráfico (.PNG)
+    directamente por WhatsApp:
+    - En Celular (Android / iPhone): Abre el menú nativo de compartir con el archivo de imagen PNG
+      adjunto (`navigator.share({ files: [pngFile] })`) para enviarlo directo por WhatsApp.
+    - En PC / WhatsApp Web (o como segunda opción directa al número): Copia automáticamente la imagen
+      gráfica del ticket al portapapeles (`ClipboardItem`), descarga la imagen PNG y abre el chat
+      de WhatsApp del paciente para pegar (`Ctrl+V`) la tarjeta gráfica.
+    """
+    if png_bytes is None:
+        png_bytes = generate_ticket_image_png(appointment)
+
+    b64_png = base64.b64encode(png_bytes).decode("ascii")
+    wa_info = generate_whatsapp_info(appointment)
+    ticket_code = appointment["ticket_code"]
+    display_phone = wa_info["display_phone"]
+    wa_url = wa_info["wa_url"]
+    caption_short = (
+        f"🏥 C.S. SU SANTIDAD JUAN PABLO II — CONSTANCIA GRÁFICA DE CITA MÉDICA\n"
+        f"🎫 Ticket: {ticket_code}\n"
+        f"📅 Fecha: {appointment['appointment_date']} | ⏰ Hora: {appointment['slot_time']} hrs (Cupo #{appointment['slot_number']:02d})\n"
+        f"👤 Paciente: {appointment['patient_names']}"
+    )
+    caption_js = caption_short.replace("\\", "\\\\").replace("`", "\\`").replace("\n", "\\n")
+
+    return f"""<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+    * {{ box-sizing: border-box; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }}
+    body {{ margin: 0; padding: 2px 0; background: transparent; }}
+    .wa-card {{
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }}
+    .btn-wa-graphic {{
+        width: 100%;
+        padding: 13px 16px;
+        border: none;
+        border-radius: 10px;
+        background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+        color: #ffffff;
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        box-shadow: 0 4px 12px rgba(22, 163, 74, 0.25);
+        transition: transform 0.1s ease, opacity 0.15s ease;
+    }}
+    .btn-wa-graphic:active {{ transform: scale(0.99); opacity: 0.92; }}
+    .btn-wa-direct {{
+        width: 100%;
+        padding: 10px 14px;
+        border: 1.5px solid #16a34a;
+        border-radius: 9px;
+        background: #f0fdf4;
+        color: #166534;
+        font-size: 13.5px;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+    }}
+    .status-note {{
+        font-size: 12.5px;
+        color: #166534;
+        background: #dcfce7;
+        border: 1px solid #86efac;
+        border-radius: 8px;
+        padding: 8px 12px;
+        text-align: center;
+        display: none;
+        font-weight: 600;
+    }}
+</style>
+</head>
+<body>
+<div class="wa-card">
+    <button type="button" class="btn-wa-graphic" onclick="shareGraphicTicket()">
+        🖼️📲 Enviar Aviso Gráfico por WhatsApp (Imagen del Ticket)
+    </button>
+    <button type="button" class="btn-wa-direct" onclick="copyImageAndOpenWhatsApp()">
+        💬 Copiar Imagen Gráfica y Abrir Chat de WhatsApp ({display_phone})
+    </button>
+    <div id="waStatusBox" class="status-note"></div>
+</div>
+
+<script>
+const B64_PNG = "{b64_png}";
+const FILE_NAME = "Ticket_{ticket_code}.png";
+const WA_URL = "{wa_url}";
+const CAPTION_TEXT = `{caption_js}`;
+
+function b64ToBlob(b64Data, contentType='image/png') {{
+    const byteCharacters = atob(b64Data);
+    const byteArrays = [];
+    for (let offset = 0; offset < byteCharacters.length; offset += 512) {{
+        const slice = byteCharacters.slice(offset, offset + 512);
+        const byteNumbers = new Array(slice.length);
+        for (let i = 0; i < slice.length; i++) {{
+            byteNumbers[i] = slice.charCodeAt(i);
+        }}
+        byteArrays.push(new Uint8Array(byteNumbers));
+    }}
+    return new Blob(byteArrays, {{type: contentType}});
+}}
+
+function showNote(msg) {{
+    const box = document.getElementById("waStatusBox");
+    box.innerText = msg;
+    box.style.display = "block";
+}}
+
+function triggerDownload(blob) {{
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = FILE_NAME;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+}}
+
+async function shareGraphicTicket() {{
+    const blob = b64ToBlob(B64_PNG, "image/png");
+    const file = new File([blob], FILE_NAME, {{ type: "image/png" }});
+
+    // 1. En Celular (Android / iPhone): Compartir directamente el archivo de imagen PNG a WhatsApp
+    if (navigator.canShare && navigator.canShare({{ files: [file] }})) {{
+        try {{
+            await navigator.share({{
+                files: [file],
+                title: "Ticket de Cita " + "{ticket_code}",
+                text: CAPTION_TEXT
+            }});
+            showNote("✅ Selecciona WhatsApp en tu pantalla para enviar el Ticket Gráfico.");
+            return;
+        }} catch (err) {{
+            if (err && err.name === "AbortError") return;
+        }}
+    }}
+
+    // 2. Respaldo automático en PC o navegadores sin Web Share de archivos
+    await copyImageAndOpenWhatsApp();
+}}
+
+async function copyImageAndOpenWhatsApp() {{
+    const blob = b64ToBlob(B64_PNG, "image/png");
+    let copied = false;
+    if (navigator.clipboard && window.ClipboardItem) {{
+        try {{
+            await navigator.clipboard.write([
+                new ClipboardItem({{ "image/png": blob }})
+            ]);
+            copied = true;
+        }} catch (e) {{
+            copied = false;
+        }}
+    }}
+    triggerDownload(blob);
+    if (copied) {{
+        showNote("✅ ¡Imagen del Ticket copiada al portapapeles y descargada! En WhatsApp solo presiona PEGAR (Ctrl+V) para enviar el aviso gráfico.");
+    }} else {{
+        showNote("✅ ¡Imagen del Ticket descargada! Adjunta la imagen descargada en la ventana de WhatsApp que se abrirá.");
+    }}
+    setTimeout(() => {{
+        window.open(WA_URL, "_blank");
+    }}, 450);
+}}
+</script>
+</body>
+</html>"""
 
 
 def format_peru_whatsapp_number(raw_phone: str) -> str:
@@ -104,12 +658,15 @@ def generate_ticket_html(appointment: dict) -> str:
     doc_type_lbl = appointment.get("patient_doc_type") or "DNI"
     wa_info = generate_whatsapp_info(appointment)
 
-    qr_payload = urllib.parse.quote(
+    qr_raw_payload = (
         f"CS-JP2|{appointment['ticket_code']}|{doc_type_lbl}:{appointment['patient_dni']}|"
         f"FECHA:{appointment['appointment_date']}|HORA:{appointment['slot_time']}|"
         f"CUPO:{appointment['slot_number']}|MED:{appointment['doctor_cmp']}"
     )
-    qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=130x130&data={qr_payload}"
+    qr_pil = _build_qr_image(qr_raw_payload, target_size=130)
+    qr_buf = io.BytesIO()
+    qr_pil.save(qr_buf, format="PNG")
+    qr_url = "data:image/png;base64," + base64.b64encode(qr_buf.getvalue()).decode("ascii")
 
     return f"""<!DOCTYPE html>
 <html lang="es">

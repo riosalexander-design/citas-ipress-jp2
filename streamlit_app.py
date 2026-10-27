@@ -15,6 +15,7 @@ import urllib.parse
 from datetime import date
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 import database
 import holidays_pe
@@ -44,6 +45,8 @@ from schedule_sync import (
 )
 from exporter import (
     generate_ticket_html,
+    generate_ticket_image_png,
+    generate_whatsapp_graphic_share_html,
     generate_whatsapp_info,
     build_admission_daily_records,
     generate_admission_datasheet_csv,
@@ -158,47 +161,38 @@ def show_pre_booking_confirmation_dialog(p_data: dict):
 
 
 # -------------------------------------------------------------------
-# VENTANA MODAL 2: TICKET OFICIAL CON QR, DESCARGA Y ENVÍO A WHATSAPP
-# (100% nativo para celular y PC)
+# VENTANA MODAL 2: TICKET OFICIAL CON QR, DESCARGA Y ENVÍO GRÁFICO A WHATSAPP
+# (100% nativo para celular y PC — Aviso Gráfico idéntico al de impresión)
 # -------------------------------------------------------------------
-@st.dialog("🎫 ¡Cita Confirmada! Tu Constancia de Atención", width="large")
+@st.dialog("🎫 ¡Cita Confirmada! Tu Ticket Gráfico de Atención", width="large")
 def show_appointment_voucher_dialog(tk: dict):
-    t_nom = "MAÑANA (08:00 a 12:00 hrs)" if tk["shift_period"] == "M" else "TARDE (14:00 a 18:00 hrs)"
     doc_type_lbl = tk.get("patient_doc_type") or "DNI"
-    wa_info = generate_whatsapp_info(tk)
+    png_bytes = generate_ticket_image_png(tk)
     html_voucher = generate_ticket_html(tk)
-
-    qr_payload = urllib.parse.quote(
-        f"CS-JP2|{tk['ticket_code']}|{doc_type_lbl}:{tk['patient_dni']}|"
-        f"FECHA:{tk['appointment_date']}|HORA:{tk['slot_time']}|CUPO:{tk['slot_number']}"
-    )
-    qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={qr_payload}"
+    wa_share_html = generate_whatsapp_graphic_share_html(tk, png_bytes=png_bytes)
 
     st.success(f"✅ **¡Tu cita fue reservada con éxito!** N° de Ticket: **{tk['ticket_code']}**")
 
-    with st.container(border=True):
-        st.markdown("#### 🏥 C.S. Su Santidad Juan Pablo II — Medicina General")
-        st.markdown(f"### 📅 Fecha: **{tk['appointment_date']}** | ⏰ Hora: **{tk['slot_time']} hrs**")
-        st.markdown(f"**🔢 Cupo N° {tk['slot_number']:02d} de 16** — Turno {t_nom}")
-        st.markdown(f"**👨‍⚕️ Médico:** {tk['doctor_name']} (CMP {tk['doctor_cmp']})")
-        st.markdown(
-            f"**👤 Paciente:** {tk['patient_names']} ({doc_type_lbl}: {tk['patient_dni']} — {tk.get('patient_age') or '-'} años)"
-        )
-        st.markdown(
-            f"**🛡️ Seguro:** {tk.get('insurance_type', 'SIS')} | **📱 Celular:** {wa_info['display_phone']}"
-        )
-        st.markdown(f"**🩺 Motivo:** {tk.get('reason') or 'Consulta de Medicina General'}")
-        st.image(qr_url, caption=f"Código QR {tk['ticket_code']}", width=130)
+    # Mostrar la imagen gráfica exacta del ticket (igual a la de impresión)
+    st.image(
+        png_bytes,
+        caption=f"Ticket Oficial de Cita {tk['ticket_code']} — C.S. Su Santidad Juan Pablo II",
+        use_container_width=True,
+    )
 
-    st.markdown("#### 👇 Guarda o envía tu constancia de cita:")
-    st.link_button(
-        f"📲 1. Enviar Constancia a mi WhatsApp ({wa_info['display_phone']})",
-        url=wa_info["wa_url"],
+    st.markdown("#### 👇 Envía tu Ticket Gráfico por WhatsApp o descárgalo:")
+    components.html(wa_share_html, height=130)
+
+    st.download_button(
+        "🖼️ 1. Descargar Imagen del Ticket Gráfico (.PNG para WhatsApp)",
+        data=png_bytes,
+        file_name=f"Ticket_{tk['ticket_code']}.png",
+        mime="image/png",
         use_container_width=True,
         type="primary",
     )
     st.download_button(
-        "📥 2. Descargar Ticket Oficial (Imprimible / PDF)",
+        "🖨️ 2. Descargar Ticket para Impresión (.HTML / PDF)",
         data=html_voucher.encode("utf-8"),
         file_name=f"Ticket_{tk['ticket_code']}.html",
         mime="text/html",
@@ -330,27 +324,31 @@ with tab_reservar:
         err_txt = st.session_state["booking_error_banner"]
         st.error(err_txt)
 
-    # Mostrar tarjeta con botón de descarga y WhatsApp si acaba de reservar
+    # Mostrar tarjeta con Ticket Gráfico, botón de envío gráfico a WhatsApp y descarga si acaba de reservar
     if st.session_state["last_booked_ticket"] is not None:
         tk = st.session_state["last_booked_ticket"]
-        doc_type_lbl = tk.get("patient_doc_type") or "DNI"
-        wa_info = generate_whatsapp_info(tk)
+        png_bytes = generate_ticket_image_png(tk)
         html_voucher = generate_ticket_html(tk)
-        t_nom = "MAÑANA" if tk["shift_period"] == "M" else "TARDE"
+        wa_share_html = generate_whatsapp_graphic_share_html(tk, png_bytes=png_bytes)
         with st.container(border=True):
             st.success(f"🎫 **Cita Reservada — Ticket N° {tk['ticket_code']}**")
-            st.markdown(
-                f"📅 **Fecha:** {tk['appointment_date']} | ⏰ **Hora:** **{tk['slot_time']} hrs** (Cupo N° {tk['slot_number']:02d} - {t_nom})\n\n"
-                f"👤 **Paciente:** {tk['patient_names']} ({doc_type_lbl}: {tk['patient_dni']}) • 👨‍⚕️ **Médico:** {tk['doctor_name']}"
+            st.image(
+                png_bytes,
+                caption=f"Ticket Oficial {tk['ticket_code']}",
+                use_container_width=True,
             )
-            st.link_button(
-                f"📲 Enviar Constancia a mi WhatsApp ({wa_info['display_phone']})",
-                url=wa_info["wa_url"],
+            components.html(wa_share_html, height=130)
+            st.download_button(
+                "🖼️ Descargar Imagen del Ticket (.PNG para WhatsApp)",
+                data=png_bytes,
+                file_name=f"Ticket_{tk['ticket_code']}.png",
+                mime="image/png",
+                key="banner_dl_png_btn",
                 use_container_width=True,
                 type="primary",
             )
             st.download_button(
-                "📥 Descargar Ticket (.html / PDF)",
+                "🖨️ Descargar Ticket para Impresión (.HTML / PDF)",
                 data=html_voucher.encode("utf-8"),
                 file_name=f"Ticket_{tk['ticket_code']}.html",
                 mime="text/html",
@@ -597,31 +595,29 @@ with tab_consultar:
                     }.get(app_item["status"], app_item["status"].upper())
 
                     doc_type_lbl = app_item.get("patient_doc_type") or "DNI"
-                    wa_item = generate_whatsapp_info(app_item)
+                    png_item = generate_ticket_image_png(app_item)
+                    wa_share_item = generate_whatsapp_graphic_share_html(app_item, png_bytes=png_item)
                     voucher_html = generate_ticket_html(app_item)
 
                     with st.container(border=True):
                         st.markdown(f"#### 🎫 Ticket: **{app_item['ticket_code']}** ({status_icon})")
-                        st.markdown(
-                            f"👤 **Paciente:** {app_item['patient_names']} ({doc_type_lbl}: {app_item['patient_dni']})"
+                        st.image(
+                            png_item,
+                            caption=f"Ticket Oficial {app_item['ticket_code']} — {t_label}",
+                            use_container_width=True,
                         )
-                        st.markdown(
-                            f"📅 **Fecha:** {app_item['appointment_date']} — **{t_label}**"
-                        )
-                        st.markdown(
-                            f"⏰ **Horario:** **{app_item['slot_time']} hrs** (Cupo N° {app_item['slot_number']:02d} de 16)"
-                        )
-                        st.markdown(
-                            f"👨‍⚕️ **Médico:** {app_item['doctor_name']} (CMP {app_item['doctor_cmp']})"
-                        )
-                        st.link_button(
-                            f"📲 Enviar a WhatsApp ({wa_item['display_phone']})",
-                            url=wa_item["wa_url"],
+                        components.html(wa_share_item, height=130)
+                        st.download_button(
+                            "🖼️ Descargar Imagen del Ticket (.PNG para WhatsApp)",
+                            data=png_item,
+                            file_name=f"Ticket_{app_item['ticket_code']}.png",
+                            mime="image/png",
+                            key=f"dl_png_{app_item['id']}",
                             use_container_width=True,
                             type="primary",
                         )
                         st.download_button(
-                            "📥 Descargar Ticket (.html / PDF)",
+                            "🖨️ Descargar Ticket para Impresión (.HTML / PDF)",
                             data=voucher_html.encode("utf-8"),
                             file_name=f"Ticket_{app_item['ticket_code']}.html",
                             mime="text/html",
@@ -816,7 +812,8 @@ with tab_admision:
                     ),
                 )
                 selected_app_obj = next((a for a in booked_today if a["id"] == sel_app_id), booked_today[0])
-                wa_adm = generate_whatsapp_info(selected_app_obj)
+                png_adm = generate_ticket_image_png(selected_app_obj)
+                wa_adm_html = generate_whatsapp_graphic_share_html(selected_app_obj, png_bytes=png_adm)
 
                 new_st = st.selectbox(
                     "Nuevo Estado:",
@@ -835,9 +832,13 @@ with tab_admision:
                         st.rerun()
                     else:
                         st.error(msg_u)
-                st.link_button(
-                    f"📲 Enviar WhatsApp al Paciente ({wa_adm['display_phone']})",
-                    url=wa_adm["wa_url"],
+                components.html(wa_adm_html, height=130)
+                st.download_button(
+                    "🖼️ Descargar Ticket Gráfico del Paciente (.PNG)",
+                    data=png_adm,
+                    file_name=f"Ticket_{selected_app_obj['ticket_code']}.png",
+                    mime="image/png",
+                    key="adm_dl_png_btn",
                     use_container_width=True,
                 )
 
