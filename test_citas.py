@@ -95,6 +95,19 @@ def run_tests():
     assert ticket["patient_dni"] == "08123456"
     print("Cita reservada con 0 inicial:", ticket["ticket_code"], "DNI:", ticket["patient_dni"])
 
+    # Verificar que se haya sincronizado el bloqueo en la BD externa de turnos-ipress (si está disponible)
+    from database import find_external_turnos_db
+    import sqlite3
+    ext_turnos_db = find_external_turnos_db()
+    if ext_turnos_db:
+        econn = sqlite3.connect(ext_turnos_db)
+        lock_row = econn.execute(
+            "SELECT appointments_count, sample_tickets FROM shift_appointment_locks WHERE year=2026 AND month=11 AND day=16 AND shift_period='M'"
+        ).fetchone()
+        econn.close()
+        assert lock_row is not None and lock_row[0] >= 1, "Debe bloquear el turno M del 16/11/2026 en ipress_turnos.db"
+        print("Bloqueo de turno sincronizado hacia turnos-ipress:", lock_row)
+
     # e.1) Probar restricción de 1 cita por semana con el MISMO DNI en otro día de la misma semana (Miércoles 18/11/2026)
     ok_wk_dni, msg_wk_dni, _ = book_appointment(
         year=2026,
@@ -174,11 +187,13 @@ def run_tests():
     assert "08123456" in csv_text and "001598745" in csv_text
     print("Exportacion de Hoja de Datos de Admision (.xlsx y .csv) verificada.")
 
-    # Limpiar citas de prueba
+    # Limpiar citas de prueba y resincronizar bloqueos
+    from schedule_sync import sync_locks_to_external_turnos_db
     with get_connection() as conn:
         conn.execute("DELETE FROM appointments WHERE patient_dni IN ('08123456', '001598745', '44556677')")
         conn.execute("DELETE FROM audit_logs WHERE user_name = 'Test Suite'")
         conn.commit()
+    sync_locks_to_external_turnos_db()
 
     print("[OK] TODAS LAS CONDICIONES (a, b, c, d, e) PASARON EXITOSAMENTE.")
 

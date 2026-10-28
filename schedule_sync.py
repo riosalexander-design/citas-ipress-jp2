@@ -1012,7 +1012,86 @@ def book_appointment(
         conn.commit()
 
         row = conn.execute("SELECT * FROM appointments WHERE id = ?", (new_id,)).fetchone()
-        return True, f"¡Cita reservada con éxito! Código de Ticket: {ticket_code}", dict(row)
+        res_dict = dict(row)
+
+    sync_locks_to_external_turnos_db()
+    return True, f"¡Cita reservada con éxito! Código de Ticket: {ticket_code}", res_dict
+
+
+def sync_locks_to_external_turnos_db(target_turnos_db_path: str = None) -> dict:
+    """
+    Sincroniza los bloqueos de turnos que tienen citas médicas activas (status != 'cancelada')
+    hacia la tabla `shift_appointment_locks` del aplicativo de horarios (turnos-ipress / ipress_turnos.db).
+    De esta forma, cuando se saca una cita aquí, ya no se puede modificar ni eliminar ese turno en el app de horarios.
+    """
+    ext_path = target_turnos_db_path or find_external_turnos_db()
+    if not ext_path or not os.path.exists(ext_path):
+        return {"synced": False, "locks_count": 0}
+
+    try:
+        with get_connection() as conn:
+            active_rows = conn.execute(
+                """
+                SELECT year, month, day, shift_period, doctor_cmp,
+                       COUNT(*) as cnt,
+                       GROUP_CONCAT(ticket_code, ', ') as tickets
+                FROM appointments
+                WHERE status != 'cancelada'
+                GROUP BY year, month, day, shift_period, doctor_cmp
+                """
+            ).fetchall()
+
+        ext_conn = sqlite3.connect(ext_path, timeout=15.0)
+        ext_conn.row_factory = sqlite3.Row
+        ext_conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS shift_appointment_locks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                year INTEGER NOT NULL,
+                month INTEGER NOT NULL,
+                day INTEGER NOT NULL,
+                shift_period TEXT NOT NULL,
+                doctor_id INTEGER NOT NULL,
+                doctor_cmp TEXT NOT NULL,
+                appointments_count INTEGER NOT NULL DEFAULT 1,
+                sample_tickets TEXT DEFAULT '',
+                synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(year, month, day, shift_period, doctor_id)
+            )
+            """
+        )
+        docs = ext_conn.execute("SELECT id, cmp FROM doctors").fetchall()
+        cmp_to_id = {str(r["cmp"]).strip(): r["id"] for r in docs}
+
+        ext_conn.execute("DELETE FROM shift_appointment_locks")
+        locks_inserted = 0
+        for r in active_rows:
+            cmp_str = str(r["doctor_cmp"] or "").strip()
+            target_doc_id = cmp_to_id.get(cmp_str)
+            if target_doc_id and r["cnt"] > 0:
+                ext_conn.execute(
+                    """
+                    INSERT OR REPLACE INTO shift_appointment_locks
+                    (year, month, day, shift_period, doctor_id, doctor_cmp, appointments_count, sample_tickets, synced_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    """,
+                    (
+                        r["year"],
+                        r["month"],
+                        r["day"],
+                        r["shift_period"],
+                        target_doc_id,
+                        cmp_str,
+                        r["cnt"],
+                        r["tickets"] or "",
+                    ),
+                )
+                locks_inserted += 1
+        ext_conn.commit()
+        ext_conn.close()
+        return {"synced": True, "locks_count": locks_inserted}
+    except Exception:
+        return {"synced": False, "locks_count": 0}
 
 
 def cancel_appointment(ticket_code: str, patient_dni: str = None, cancelled_by: str = "Paciente") -> tuple[bool, str]:
@@ -1049,7 +1128,8 @@ def cancel_appointment(ticket_code: str, patient_dni: str = None, cancelled_by: 
             conn=conn,
         )
         conn.commit()
-        return True, f"La cita {row['ticket_code']} ha sido cancelada y el Cupo #{row['slot_number']} quedó libre."
+    sync_locks_to_external_turnos_db()
+    return True, f"La cita {row['ticket_code']} ha sido cancelada y el Cupo #{row['slot_number']} quedó libre."
 
 
 def update_appointment_status(appointment_id: int, new_status: str, updated_by: str) -> tuple[bool, str]:
@@ -1078,7 +1158,8 @@ def update_appointment_status(appointment_id: int, new_status: str, updated_by: 
             conn=conn,
         )
         conn.commit()
-        return True, f"Estado de la cita {row['ticket_code']} actualizado a '{new_status.upper()}'."
+    sync_locks_to_external_turnos_db()
+    return True, f"Estado de la cita {row['ticket_code']} actualizado a '{new_status.upper()}'."
 
 
 def search_appointments(query_dni_or_ticket: str, allow_name_like: bool = True) -> list[dict]:
